@@ -1,0 +1,44 @@
+[project]
+name = "business-assistant-imap-plugin"
+version = "0.1.0"
+description = "IMAP/SMTP email plugin for Business Assistant v2"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "python-dateutil",
+    "icalendar",
+    "imap-client-lib",
+    "business-assistant-v2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/business_assistant_imap"]
+
+[tool.uv.sources]
+imap-client-lib = { path = "D:/GIT/BenjaminKobjolke/imap_client_python", editable = true }
+business-assistant-v2 = { path = "D:/GIT/BenjaminKobjolke/business-assistant-v2", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+    "mypy>=1.0.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "SIM"]
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
