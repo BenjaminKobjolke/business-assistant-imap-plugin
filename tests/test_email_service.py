@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -35,7 +36,10 @@ class TestEmailService:
         service = EmailService(email_settings)
         result = service.list_inbox()
 
-        assert "Test Email" in result
+        data = json.loads(result)
+        assert len(data["emails"]) == 1
+        assert data["emails"][0]["subject"] == "Test Email"
+        assert data["emails"][0]["_id"] == "1"
         mock_client.disconnect.assert_called_once()
 
     @patch("business_assistant_imap.email_service.ImapClient")
@@ -106,11 +110,13 @@ class TestEmailService:
         service = EmailService(email_settings)
         result = service.search_sent_to("alice@example.com")
 
-        assert "alice@example.com" in result
-        assert "Hallo Frau Schmidt" in result
-        assert "[42]" in result
-        assert "Subject: Hintergrundbilder" in result
-        assert "Date: Mon, 09 Mar 2026" in result
+        data = json.loads(result)
+        assert len(data["sent_emails"]) == 1
+        email = data["sent_emails"][0]
+        assert email["_id"] == "42"
+        assert email["subject"] == "Hintergrundbilder"
+        assert "Mon, 09 Mar 2026" in email["date"]
+        assert "Hallo Frau Schmidt" in email["body_snippet"]
         # Verify IMAP TO search was used
         mock_client.get_messages.assert_called_once_with(
             search_criteria=["TO", "alice@example.com"],
@@ -154,8 +160,10 @@ class TestEmailService:
         service = EmailService(email_settings)
         result = service.show_email("42", folder="Sent")
 
-        assert "Subject: Hintergrundbilder" in result
-        assert "Hier ist der Link." in result
+        data = json.loads(result)
+        assert data["subject"] == "Hintergrundbilder"
+        assert data["body"] == "Hier ist der Link."
+        assert data["_id"] == "42"
         mock_client.get_messages.assert_called_once_with(
             search_criteria=["ALL"],
             folder="Sent",

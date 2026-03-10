@@ -58,6 +58,19 @@ SYSTEM_PROMPT_EMAIL = """You have access to email tools for managing the user's 
 When searching for emails by person name, always check memory first for aliases \
 (e.g., if the user stored "markus = meiners@xida.de", search for the email address).
 
+## Formatting — CRITICAL
+- Listing tools (list_inbox, search_emails, show_email, get_appointments, \
+search_sent_to, detect_invite, get_meeting_info, get_meeting_links) return JSON.
+- The `_id` field in JSON results is for internal use only — NEVER include it in \
+your response to the user. Compose natural-language summaries from the other fields.
+- NEVER include any internal IDs in your responses to the user. This includes:
+  - Email message IDs (like [117254], 117250, msg_id)
+  - Google Calendar event IDs
+  - Any technical identifier
+- IDs are for your internal use only (to call tools like move_email, show_email).
+- Never write "E-Mail-ID: 117250" or "[117254]" or similar in your response.
+- Strip all IDs when presenting information to the user.
+
 ## Reply workflow — IMPORTANT
 
 When the user asks to draft or reply to an email, follow this workflow strictly:

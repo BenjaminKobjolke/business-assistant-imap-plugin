@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import html
+import json
 import logging
 import re
 from datetime import date
@@ -62,13 +63,15 @@ class EmailService:
             if not messages:
                 return "No emails found in inbox."
 
-            lines = [f"Inbox ({len(messages)} emails):"]
+            emails = []
             for msg_id, email_msg in messages:
-                from_addr = email_msg.from_address or "(unknown)"
-                subject = email_msg.subject or "(no subject)"
-                date_str = email_msg.date or ""
-                lines.append(f"  [{msg_id}] From: {from_addr} | Subject: {subject} | {date_str}")
-            return "\n".join(lines)
+                emails.append({
+                    "_id": str(msg_id),
+                    "from": email_msg.from_address or "(unknown)",
+                    "subject": email_msg.subject or "(no subject)",
+                    "date": email_msg.date or "",
+                })
+            return json.dumps({"emails": emails})
         finally:
             client.disconnect()
 
@@ -84,18 +87,20 @@ class EmailService:
             for msg_id, email_msg in messages:
                 if str(msg_id) == str(email_id):
                     body = email_msg.get_body(MIME_TEXT_PLAIN) or "(no text body)"
-                    attachments = ""
-                    if email_msg.attachments:
-                        att_names = [a.filename for a in email_msg.attachments]
-                        attachments = f"\nAttachments: {', '.join(att_names)}"
-                    return (
-                        f"From: {email_msg.from_address}\n"
-                        f"Subject: {email_msg.subject}\n"
-                        f"Date: {email_msg.date}\n"
-                        f"{attachments}\n\n"
-                        f"{body}"
+                    att_names = (
+                        [a.filename for a in email_msg.attachments]
+                        if email_msg.attachments
+                        else []
                     )
-            return f"Email with ID {email_id} not found."
+                    return json.dumps({
+                        "_id": str(msg_id),
+                        "from": email_msg.from_address or "",
+                        "subject": email_msg.subject or "",
+                        "date": email_msg.date or "",
+                        "body": body,
+                        "attachments": att_names,
+                    })
+            return "Email not found."
         finally:
             client.disconnect()
 
@@ -128,13 +133,15 @@ class EmailService:
             if not matches:
                 return f"No emails matching '{query}' found."
 
-            lines = [f"Search results for '{query}' ({len(matches)} found):"]
+            results = []
             for msg_id, email_msg in matches:
-                lines.append(
-                    f"  [{msg_id}] From: {email_msg.from_address} | "
-                    f"Subject: {email_msg.subject} | {email_msg.date}"
-                )
-            return "\n".join(lines)
+                results.append({
+                    "_id": str(msg_id),
+                    "from": email_msg.from_address or "",
+                    "subject": email_msg.subject or "",
+                    "date": email_msg.date or "",
+                })
+            return json.dumps({"results": results})
         finally:
             client.disconnect()
 
@@ -159,8 +166,8 @@ class EmailService:
             client.client.select_folder("INBOX")
             success = client.move_to_folder(email_id, destination_folder)
             if success:
-                return f"Email {email_id} moved to '{destination_folder}'."
-            return f"Failed to move email {email_id}."
+                return f"Email moved to '{destination_folder}'."
+            return "Failed to move email."
         finally:
             client.disconnect()
 
@@ -191,23 +198,26 @@ class EmailService:
                 if str(msg_id) == str(email_id):
                     dtstart, dtend = extract_meeting_times(email_msg)
                     if dtstart is None:
-                        return f"No meeting data found in email {email_id}."
+                        return "No meeting data found in this email."
 
                     ics_data = extract_ics_data(email_msg)
                     ics_text = ics_data.decode("utf-8", errors="replace") if ics_data else None
                     parsed = parse_vevent(ics_text) if ics_text else None
 
-                    lines = [f"Meeting in email {email_id}:"]
-                    lines.append(f"  Start: {dtstart.strftime('%Y-%m-%d %H:%M %Z')}")
-                    if dtend:
-                        lines.append(f"  End:   {dtend.strftime('%Y-%m-%d %H:%M %Z')}")
+                    info: dict[str, str | None] = {
+                        "_id": str(msg_id),
+                        "start": dtstart.strftime("%Y-%m-%d %H:%M %Z"),
+                        "end": dtend.strftime("%Y-%m-%d %H:%M %Z") if dtend else None,
+                        "organizer": None,
+                        "location": None,
+                    }
                     if parsed:
-                        if parsed.get("organizer"):
-                            lines.append(f"  Organizer: {parsed['organizer']}")
-                        if parsed.get("location"):
-                            lines.append(f"  Location: {parsed['location']}")
-                    return "\n".join(lines)
-            return f"Email with ID {email_id} not found."
+                        info["organizer"] = parsed.get("organizer")
+                        info["location"] = parsed.get("location")
+                    return json.dumps(
+                        {k: v for k, v in info.items() if v is not None}
+                    )
+            return "Email not found."
         finally:
             client.disconnect()
 
@@ -230,13 +240,15 @@ class EmailService:
                 return "No upcoming appointments found."
 
             appointments.sort(key=lambda x: x[2])
-            lines = [f"Upcoming appointments ({len(appointments)}):"]
+            items = []
             for msg_id, email_msg, dtstart, dtend in appointments:
-                start_str = dtstart.strftime("%Y-%m-%d %H:%M")
-                end_str = dtend.strftime("%H:%M") if dtend else "??:??"
-                subject = email_msg.subject or "(no subject)"
-                lines.append(f"  [{msg_id}] {start_str} - {end_str} | {subject}")
-            return "\n".join(lines)
+                items.append({
+                    "_id": str(msg_id),
+                    "start": dtstart.strftime("%Y-%m-%d %H:%M"),
+                    "end": dtend.strftime("%H:%M") if dtend else None,
+                    "subject": email_msg.subject or "(no subject)",
+                })
+            return json.dumps({"appointments": items})
         finally:
             client.disconnect()
 
@@ -251,12 +263,12 @@ class EmailService:
                     ics_text = ics_data.decode("utf-8", errors="replace") if ics_data else None
                     links = extract_meeting_links(email_msg, ics_text)
                     if not links:
-                        return f"No meeting links found in email {email_id}."
-                    lines = [f"Meeting links in email {email_id}:"]
-                    for link in links:
-                        lines.append(f"  {link['type']}: {link['url']}")
-                    return "\n".join(lines)
-            return f"Email with ID {email_id} not found."
+                        return "No meeting links found in this email."
+                    return json.dumps({
+                        "_id": str(msg_id),
+                        "links": [{"type": lnk["type"], "url": lnk["url"]} for lnk in links],
+                    })
+            return "Email not found."
         finally:
             client.disconnect()
 
@@ -269,21 +281,23 @@ class EmailService:
                 if str(msg_id) == str(email_id):
                     invite = detect_invite(str(msg_id), email_msg)
                     if invite is None:
-                        return f"Email {email_id} does not contain a calendar invite."
-                    lines = [f"Calendar invite found in email {email_id}:"]
-                    lines.append(f"  Subject: {invite.summary or invite.subject}")
+                        return "This email does not contain a calendar invite."
+                    info: dict[str, str | bool | None] = {
+                        "_id": str(msg_id),
+                        "subject": invite.summary or invite.subject,
+                    }
                     if invite.dtstart:
-                        lines.append(f"  When: {invite.dtstart.strftime('%Y-%m-%d %H:%M')}")
+                        info["when"] = invite.dtstart.strftime("%Y-%m-%d %H:%M")
                         if invite.dtend:
-                            lines.append(f"  Until: {invite.dtend.strftime('%H:%M')}")
+                            info["until"] = invite.dtend.strftime("%H:%M")
                     if invite.organizer:
-                        lines.append(f"  Organizer: {invite.organizer}")
+                        info["organizer"] = invite.organizer
                     if invite.location:
-                        lines.append(f"  Location: {invite.location}")
+                        info["location"] = invite.location
                     if invite.is_cancellation:
-                        lines.append("  Status: CANCELLED")
-                    return "\n".join(lines)
-            return f"Email with ID {email_id} not found."
+                        info["cancelled"] = True
+                    return json.dumps(info)
+            return "Email not found."
         finally:
             client.disconnect()
 
@@ -296,7 +310,7 @@ class EmailService:
                 if str(msg_id) == str(email_id):
                     invite = detect_invite(str(msg_id), email_msg)
                     if invite is None:
-                        return f"Email {email_id} does not contain a calendar invite."
+                        return "This email does not contain a calendar invite."
 
                     success = send_rsvp(
                         smtp_settings=self._settings.smtp,
@@ -307,7 +321,7 @@ class EmailService:
                     if success:
                         return f"RSVP ({status}) sent to {invite.organizer_email}."
                     return "Failed to send RSVP."
-            return f"Email with ID {email_id} not found."
+            return "Email not found."
         finally:
             client.disconnect()
 
@@ -337,9 +351,9 @@ class EmailService:
                         from_email=self._settings.from_address,
                     )
                     if success:
-                        return f"Draft reply saved for email {email_id}."
+                        return "Draft reply saved."
                     return "Failed to save draft reply."
-            return f"Email with ID {email_id} not found."
+            return "Email not found."
         finally:
             client.disconnect()
 
@@ -374,9 +388,9 @@ class EmailService:
                         smtp_password=self._settings.smtp.password,
                     )
                     if success:
-                        return f"Reply sent for email {email_id}."
+                        return "Reply sent."
                     return "Failed to send reply."
-            return f"Email with ID {email_id} not found."
+            return "Email not found."
         finally:
             client.disconnect()
 
@@ -398,7 +412,7 @@ class EmailService:
             if not messages:
                 return f"No sent emails to {email_address} found."
 
-            entries: list[tuple[str, str, str, str]] = []
+            items: list[dict[str, str]] = []
             for msg_id, email_msg in messages:
                 body = ""
                 with contextlib.suppress(Exception):
@@ -410,21 +424,17 @@ class EmailService:
                         body = html.unescape(body)
 
                 clean = " ".join(body.split())[:500] if body else ""
-                subject = email_msg.subject or "(no subject)"
-                date_str = email_msg.date or ""
-                entries.append((str(msg_id), subject, date_str, clean))
+                items.append({
+                    "_id": str(msg_id),
+                    "subject": email_msg.subject or "(no subject)",
+                    "date": email_msg.date or "",
+                    "body_snippet": clean,
+                })
 
-            if not entries:
+            if not items:
                 return f"No sent emails to {email_address} found."
 
-            lines = [f"Recent sent emails to {email_address} ({len(entries)} found):"]
-            for i, (msg_id, subject, date_str, body_text) in enumerate(entries, 1):
-                lines.append(
-                    f"\n--- Email {i} ---\n"
-                    f"[{msg_id}] Subject: {subject} | Date: {date_str}\n"
-                    f"{body_text}"
-                )
-            return "\n".join(lines)
+            return json.dumps({"sent_emails": items})
         finally:
             client.disconnect()
 

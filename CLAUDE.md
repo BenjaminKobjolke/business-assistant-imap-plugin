@@ -29,6 +29,16 @@ The plugin exposes `register(registry: PluginRegistry)` which:
 2. Skips registration if IMAP_SERVER not configured
 3. Creates EmailService and registers 14 PydanticAI tools
 
+## Restarting the Bot
+
+After making code changes, always restart the bot by creating the restart flag:
+
+```bash
+touch "D:/GIT/BenjaminKobjolke/business-assistant-v2/restart.flag"
+```
+
+The bot picks it up within 5 seconds and restarts with fresh plugins.
+
 ## Code Analysis
 
 After implementing new features or making significant changes, run the code analysis:
