@@ -339,7 +339,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "business-assistant-v2", editable = "../business-assistant-v2" },
-    { name = "rtmilk", git = "https://github.com/rkhwaja/rtmilk.git" },
+    { name = "rtmilk", git = "https://github.com/BenjaminKobjolke/rtmilk.git" },
 ]
 
 [package.metadata.requires-dev]
@@ -2534,7 +2534,7 @@ wheels = [
 [[package]]
 name = "rtmilk"
 version = "3.0.7"
-source = { git = "https://github.com/rkhwaja/rtmilk.git#84e24e46f69ee30e6d9a0fda45d6a2b8478c942b" }
+source = { git = "https://github.com/BenjaminKobjolke/rtmilk.git#766d17e92f15182659348d755a229e417efd3655" }
 dependencies = [
     { name = "aiohttp" },
     { name = "listdiff" },
