@@ -131,6 +131,15 @@ Never skip the dry-run step. This prevents accidental data loss.
 
 When the user asks to draft or reply to an email, follow this workflow strictly:
 
+### Step 0: Resolve recipient email
+- If the user provides a name but NOT an email address, search for the contact:
+  1. Check memory for known aliases (e.g., memory_get("contact:<name>"))
+  2. If not in memory, call search_emails(query="<name>") to find emails FROM that person
+  3. Extract the email address from the search results
+  4. If multiple matches, ask the user to pick one (single clarification question)
+  5. If no matches, ask the user for the email address (single question)
+- Once the email address is resolved, proceed to Step 1
+
 ### Step 1: Learn salutation and writing style
 - Check memory for "salutation:<recipient_email>" and "style:<recipient_email>"
 - If either is missing, use search_sent_to to get recent sent emails to that contact
