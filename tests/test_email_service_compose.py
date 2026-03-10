@@ -1,0 +1,286 @@
+"""Tests for EmailService compose operations (reply, forward, send)."""
+
+from __future__ import annotations
+
+import json
+from unittest.mock import MagicMock, patch
+
+from business_assistant_imap.config import EmailSettings
+from business_assistant_imap.email_service import EmailService
+from business_assistant_imap.email_service_compose import (
+    _extract_reply_address,
+)
+from tests.conftest import FakeAttachment, FakeEmailMessage
+
+
+class TestExtractReplyAddress:
+    def test_with_angle_brackets(self) -> None:
+        assert (
+            _extract_reply_address("Alice <alice@example.com>")
+            == "alice@example.com"
+        )
+
+    def test_plain_email(self) -> None:
+        assert (
+            _extract_reply_address("alice@example.com")
+            == "alice@example.com"
+        )
+
+    def test_with_display_name(self) -> None:
+        assert (
+            _extract_reply_address('"Alice Smith" <alice@example.com>')
+            == "alice@example.com"
+        )
+
+
+class TestSearchSentTo:
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_search_sent_to(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_messages.return_value = [
+            (
+                "42",
+                FakeEmailMessage(
+                    to_address="alice@example.com",
+                    subject="Hintergrundbilder",
+                    date="Mon, 09 Mar 2026 14:30:00 +0100",
+                    body_plain="Hallo Frau Schmidt, hier ist der Bericht.",
+                ),
+            ),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.search_sent_to("alice@example.com")
+
+        data = json.loads(result)
+        assert len(data["sent_emails"]) == 1
+        email = data["sent_emails"][0]
+        assert email["_id"] == "42"
+        assert email["subject"] == "Hintergrundbilder"
+        assert "Hallo Frau Schmidt" in email["body_snippet"]
+        mock_client.get_messages.assert_called_once_with(
+            search_criteria=["TO", "alice@example.com"],
+            folder="Sent",
+            limit=3,
+            include_attachments=False,
+        )
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_search_sent_to_no_matches(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_messages.return_value = []
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.search_sent_to("alice@example.com")
+
+        assert "No sent emails to alice@example.com" in result
+
+
+class TestForwardEmail:
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_forward_email_success(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """forward_email forwards preserving attachments."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        fake_msg = FakeEmailMessage(
+            message_id="90",
+            subject="Original Subject",
+            attachments=[
+                FakeAttachment(
+                    filename="image.png",
+                    content_type="image/png",
+                    data=b"imagedata",
+                    content_id="cid-123",
+                    is_inline=True,
+                ),
+            ],
+        )
+        mock_client.get_messages.return_value = [("90", fake_msg)]
+        mock_client.forward_email.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.forward_email(
+            "90", ["helena@example.com"], "FYI"
+        )
+
+        assert "forwarded to helena@example.com" in result
+        mock_client.forward_email.assert_called_once()
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_forward_email_not_found(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_messages.return_value = []
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.forward_email("999", ["helena@example.com"])
+
+        assert result == "Email not found."
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_forward_email_failure(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        fake_msg = FakeEmailMessage(message_id="91", subject="Test")
+        mock_client.get_messages.return_value = [("91", fake_msg)]
+        mock_client.forward_email.return_value = False
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.forward_email("91", ["bob@example.com"])
+
+        assert result == "Failed to forward email."
+
+
+class TestDraftForward:
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_draft_forward_success(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """draft_forward saves a draft with attachments preserved."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        attachments = [
+            FakeAttachment(
+                filename="image.png",
+                content_type="image/png",
+                data=b"imagedata",
+                content_id="cid-123",
+                is_inline=True,
+            ),
+        ]
+        fake_msg = FakeEmailMessage(
+            message_id="100",
+            subject="Original Subject",
+            from_address="alice@example.com",
+            to_address="user@example.com",
+            body_plain="Original body text.",
+            attachments=attachments,
+        )
+        mock_client.get_messages.return_value = [("100", fake_msg)]
+        mock_client.save_draft.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.draft_forward(
+            "100", "helena@example.com", "FYI"
+        )
+
+        assert result == "Forward draft saved."
+        mock_client.save_draft.assert_called_once()
+        call_kwargs = mock_client.save_draft.call_args[1]
+        assert call_kwargs["to_addresses"] == ["helena@example.com"]
+        assert call_kwargs["subject"] == "Fwd: Original Subject"
+        assert call_kwargs["attachments"] == attachments
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_draft_forward_not_found(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_messages.return_value = []
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.draft_forward("999", "helena@example.com")
+
+        assert result == "Email not found."
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_draft_forward_failure(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        fake_msg = FakeEmailMessage(message_id="101", subject="Test")
+        mock_client.get_messages.return_value = [("101", fake_msg)]
+        mock_client.save_draft.return_value = False
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.draft_forward("101", "bob@example.com")
+
+        assert result == "Failed to save forward draft."
+
+
+class TestDraftReplyFolder:
+    @patch(
+        "business_assistant_imap.email_service_compose.save_draft_to_imap"
+    )
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_draft_reply_custom_folder(
+        self,
+        mock_client_cls: MagicMock,
+        mock_save_draft: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """draft_reply uses the folder parameter."""
+        mock_save_draft.return_value = True
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1")),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        service.draft_reply("1", "Thanks!", folder="Company/Projects")
+
+        mock_client.get_all_messages.assert_called_once_with(
+            folder="Company/Projects"
+        )
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_send_reply_custom_folder(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """send_reply uses the folder parameter."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1")),
+        ]
+        mock_client.send_email.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        service.send_reply("1", "Thanks!", folder="Company/Projects")
+
+        mock_client.get_all_messages.assert_called_once_with(
+            folder="Company/Projects"
+        )
