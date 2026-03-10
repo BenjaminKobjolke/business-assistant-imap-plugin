@@ -65,6 +65,7 @@ class FakeEmailMessage:
         message_id: str = "123",
         from_address: str = "sender@example.com",
         to_address: str = "",
+        cc_address: str = "",
         subject: str = "Test Subject",
         date: str = "Mon, 15 Mar 2026 10:00:00 +0100",
         body_plain: str = "Hello, this is a test email.",
@@ -78,7 +79,11 @@ class FakeEmailMessage:
         self._body_plain = body_plain
         self._body_html = body_html
         self.attachments = attachments or []
-        self.raw_message = FakeRawMessage({"To": to_address, "From": from_address})
+        self.raw_message = FakeRawMessage({
+            "To": to_address,
+            "From": from_address,
+            "Cc": cc_address,
+        })
 
     def get_body(self, content_type: str = "text/plain") -> str | None:
         if content_type == "text/plain":

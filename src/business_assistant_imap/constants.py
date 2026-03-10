@@ -23,6 +23,7 @@ MIME_TEXT_HTML = "text/html"
 
 # Subject prefix
 PREFIX_REPLY = "Re: "
+PREFIX_FORWARD = "Fwd: "
 
 # Plugin name
 PLUGIN_NAME = "imap"
@@ -36,11 +37,28 @@ RSVP_ACCEPTED = "ACCEPTED"
 RSVP_DECLINED = "DECLINED"
 RSVP_TENTATIVE = "TENTATIVE"
 
+# Folder validation
+FOLDER_NOT_FOUND = (
+    "Folder '{folder}' not found. Did you mean one of these?\n{suggestions}\n"
+    "Use list_folders to see all available folders."
+)
+FOLDER_NOT_FOUND_NO_SUGGESTIONS = (
+    "Folder '{folder}' not found. Use list_folders to see all available folders."
+)
+MAX_FOLDER_SUGGESTIONS = 3
+
 # System prompt extra
 SYSTEM_PROMPT_EMAIL = """You have access to email tools for managing the user's IMAP mailbox:
 - list_inbox: List recent emails from the inbox
+- list_messages: List recent emails from any folder (use folder parameter, e.g., \
+folder="Company/Clients/ProjectName"). Use list_folders to discover folder names.
 - show_email: Show full details of a specific email by ID (use folder='Sent' for sent emails)
-- search_emails: Search emails by query (from, subject, body)
+- get_attachment_url: Upload an email attachment to get a shareable URL. \
+Use when user asks to see/download an attachment or image from an email.
+- search_emails: Search emails by query (from, subject, body). \
+Use the folder parameter to search in a specific folder \
+(e.g., search_emails(query="linux", folder="Clients/Project")). \
+Do NOT put the folder name in the query string.
 - list_folders: List all mailbox folders
 - move_email: Move an email to a different folder
 - trash_email: Move an email to the Trash folder
@@ -52,6 +70,8 @@ SYSTEM_PROMPT_EMAIL = """You have access to email tools for managing the user's 
 - send_rsvp: Accept or decline a meeting invite
 - draft_reply: Save a reply draft to an email
 - send_reply: Send a reply to an email directly
+- forward_email: Forward an email preserving all attachments and inline images
+- draft_forward: Save a forward draft preserving all attachments and inline images
 - search_sent_to: Search Sent folder for recent emails to a specific address
 - build_greeting: Build a time-aware greeting (Guten Morgen/Hallo + salutation)
 
@@ -70,6 +90,18 @@ your response to the user. Compose natural-language summaries from the other fie
 - IDs are for your internal use only (to call tools like move_email, show_email).
 - Never write "E-Mail-ID: 117250" or "[117254]" or similar in your response.
 - Strip all IDs when presenting information to the user.
+
+## Showing images/attachments — CRITICAL
+You CAN share images and files with the user. You do this by uploading them via \
+get_attachment_url, which returns a public URL the user can click to view or download the file.
+NEVER say you cannot show, display, or share images or files. You ALWAYS can — use \
+get_attachment_url to upload the file and share the resulting URL.
+When a user asks to see an image, picture, attachment, or file from an email:
+1. Use show_email to get the email with attachment metadata (filenames, content types)
+2. Call get_attachment_url with the email ID and the exact filename for each requested file
+3. Share the returned URL(s) with the user so they can view/download directly
+If the email has image attachments and the user asks to "see" or "show" them, ALWAYS call \
+get_attachment_url — do NOT tell the user you cannot display images.
 
 ## Reply workflow — IMPORTANT
 

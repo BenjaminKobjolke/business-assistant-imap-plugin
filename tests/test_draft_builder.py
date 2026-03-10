@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from business_assistant_imap.draft_builder import (
     DraftEmailContent,
+    assemble_forward_html,
     assemble_reply_html,
+    make_forward_subject,
     make_reply_subject,
 )
 
@@ -21,6 +23,47 @@ class TestMakeReplySubject:
 
     def test_re_prefix_case(self) -> None:
         assert make_reply_subject("re: lowercase") == "re: lowercase"
+
+
+class TestMakeForwardSubject:
+    def test_adds_prefix(self) -> None:
+        assert make_forward_subject("Hello") == "Fwd: Hello"
+
+    def test_keeps_existing_prefix(self) -> None:
+        assert make_forward_subject("Fwd: Hello") == "Fwd: Hello"
+
+    def test_case_insensitive(self) -> None:
+        assert make_forward_subject("FWD: Hello") == "FWD: Hello"
+
+
+class TestAssembleForwardHtml:
+    def test_basic_forward(self) -> None:
+        html = assemble_forward_html(
+            additional_message="FYI",
+            original_from="alice@example.com",
+            original_to="user@example.com",
+            original_date="Mon, 10 Mar 2026 10:00:00",
+            original_subject="Original Subject",
+            original_body="Original body.",
+        )
+        assert "FYI" in html
+        assert "Forwarded message" in html
+        assert "alice@example.com" in html
+        assert "user@example.com" in html
+        assert "Original Subject" in html
+        assert "Original body." in html
+
+    def test_no_additional_message(self) -> None:
+        html = assemble_forward_html(
+            additional_message="",
+            original_from="alice@example.com",
+            original_to="user@example.com",
+            original_date="Mon, 10 Mar 2026",
+            original_subject="Test",
+            original_body="Body.",
+        )
+        assert "Forwarded message" in html
+        assert "Body." in html
 
 
 class TestAssembleReplyHtml:

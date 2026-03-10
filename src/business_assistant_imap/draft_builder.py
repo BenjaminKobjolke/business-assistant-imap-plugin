@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from .constants import MIME_TEXT_HTML, PREFIX_REPLY
+from .constants import MIME_TEXT_HTML, PREFIX_FORWARD, PREFIX_REPLY
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,53 @@ def make_reply_subject(original_subject: str) -> str:
     if original_subject.lower().startswith("re: "):
         return original_subject
     return f"{PREFIX_REPLY}{original_subject}"
+
+
+def make_forward_subject(original_subject: str) -> str:
+    """Ensure subject starts with 'Fwd: '."""
+    if original_subject.lower().startswith("fwd: "):
+        return original_subject
+    return f"{PREFIX_FORWARD}{original_subject}"
+
+
+def assemble_forward_html(
+    additional_message: str,
+    original_from: str,
+    original_to: str,
+    original_date: str,
+    original_subject: str,
+    original_body: str,
+) -> str:
+    """Build HTML body for a forwarded email."""
+    html_additional = additional_message.replace("\n", "<br>") if additional_message else ""
+    html_original = original_body.replace("\n", "<br>")
+
+    additional_block = ""
+    if html_additional:
+        additional_block = f"""
+    <div style="margin-bottom: 20px;">
+        {html_additional}
+    </div>"""
+
+    return f"""
+<div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6;">
+    {additional_block}
+
+    <hr style="margin: 20px 0; border: none; border-top: 1px solid #ccc;">
+
+    <div style="color: #666; font-size: 12px; background-color: #f9f9f9; \
+padding: 10px; border-left: 3px solid #ddd;">
+        <strong>---------- Forwarded message ----------</strong><br>
+        <strong>From:</strong> {original_from}<br>
+        <strong>Date:</strong> {original_date}<br>
+        <strong>Subject:</strong> {original_subject}<br>
+        <strong>To:</strong> {original_to}<br><br>
+        <div style="margin-top: 10px;">
+            {html_original}
+        </div>
+    </div>
+</div>
+"""
 
 
 def assemble_reply_html(content: DraftEmailContent) -> str:

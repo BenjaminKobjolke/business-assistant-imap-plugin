@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import difflib
 import html
 import json
 import logging
@@ -13,10 +14,18 @@ from imap_client_lib.account import Account
 from imap_client_lib.client import ImapClient
 
 from .config import EmailSettings
-from .constants import MIME_TEXT_PLAIN
+from .constants import (
+    FOLDER_NOT_FOUND,
+    FOLDER_NOT_FOUND_NO_SUGGESTIONS,
+    MAX_FOLDER_SUGGESTIONS,
+    MIME_TEXT_HTML,
+    MIME_TEXT_PLAIN,
+)
 from .draft_builder import (
     DraftEmailContent,
+    assemble_forward_html,
     assemble_reply_html,
+    make_forward_subject,
     make_reply_subject,
     save_draft_to_imap,
 )
@@ -55,6 +64,55 @@ class EmailService:
             raise ConnectionError(f"Failed to connect to {self._account.server}")
         return client
 
+    def _resolve_folder(
+        self, client: ImapClient, folder: str
+    ) -> tuple[str, str | None]:
+        """Validate *folder* against server folder list.
+
+        Returns ``(resolved_folder, None)`` on success, or
+        ``(folder, error_message)`` when the folder is not found.
+        If the server returns no folders, validation is skipped.
+        """
+        all_folders: list[str] = client.list_folders() or []
+        if not all_folders:
+            return folder, None
+
+        # 1. Exact match
+        if folder in all_folders:
+            return folder, None
+
+        # 2. Case-insensitive exact match
+        folder_lower = folder.lower()
+        for srv in all_folders:
+            if srv.lower() == folder_lower:
+                return srv, None
+
+        # 3. Collect suggestions: substring then fuzzy
+        suggestions: list[str] = []
+
+        # Substring (case-insensitive)
+        for srv in all_folders:
+            if folder_lower in srv.lower():
+                suggestions.append(srv)
+
+        # Fuzzy on leaf segment
+        if len(suggestions) < MAX_FOLDER_SUGGESTIONS:
+            leaves = {s.rsplit("/", 1)[-1]: s for s in all_folders}
+            fuzzy = difflib.get_close_matches(
+                folder, list(leaves.keys()), n=MAX_FOLDER_SUGGESTIONS, cutoff=0.4
+            )
+            for leaf in fuzzy:
+                full = leaves[leaf]
+                if full not in suggestions:
+                    suggestions.append(full)
+
+        suggestions = suggestions[:MAX_FOLDER_SUGGESTIONS]
+
+        if suggestions:
+            lines = "\n".join(f"  - {s}" for s in suggestions)
+            return folder, FOLDER_NOT_FOUND.format(folder=folder, suggestions=lines)
+        return folder, FOLDER_NOT_FOUND_NO_SUGGESTIONS.format(folder=folder)
+
     def list_inbox(self, limit: int = 20) -> str:
         """List recent emails from the inbox."""
         client = self._create_client()
@@ -62,6 +120,30 @@ class EmailService:
             messages = client.get_all_messages(folder="INBOX", limit=limit)
             if not messages:
                 return "No emails found in inbox."
+
+            emails = []
+            for msg_id, email_msg in messages:
+                emails.append({
+                    "_id": str(msg_id),
+                    "from": email_msg.from_address or "(unknown)",
+                    "subject": email_msg.subject or "(no subject)",
+                    "date": email_msg.date or "",
+                })
+            return json.dumps({"emails": emails})
+        finally:
+            client.disconnect()
+
+    def list_messages(self, folder: str = "INBOX", limit: int = 20) -> str:
+        """List recent emails from a specific folder."""
+        client = self._create_client()
+        try:
+            folder, error = self._resolve_folder(client, folder)
+            if error:
+                return error
+
+            messages = client.get_all_messages(folder=folder, limit=limit)
+            if not messages:
+                return f"No emails found in {folder}."
 
             emails = []
             for msg_id, email_msg in messages:
@@ -87,50 +169,142 @@ class EmailService:
             for msg_id, email_msg in messages:
                 if str(msg_id) == str(email_id):
                     body = email_msg.get_body(MIME_TEXT_PLAIN) or "(no text body)"
-                    att_names = (
-                        [a.filename for a in email_msg.attachments]
-                        if email_msg.attachments
-                        else []
-                    )
+                    to_addr = email_msg.raw_message.get("To", "")
+                    cc_addr = email_msg.raw_message.get("Cc", "")
+
+                    att_info: list[dict] = []
+                    for a in email_msg.attachments or []:
+                        entry: dict = {
+                            "filename": a.filename,
+                            "content_type": a.content_type,
+                            "size": len(a.data) if a.data else 0,
+                        }
+                        if a.content_id:
+                            entry["content_id"] = a.content_id
+                        if a.is_inline:
+                            entry["is_inline"] = True
+                        att_info.append(entry)
+
                     return json.dumps({
                         "_id": str(msg_id),
                         "from": email_msg.from_address or "",
+                        "to": to_addr,
+                        "cc": cc_addr,
                         "subject": email_msg.subject or "",
                         "date": email_msg.date or "",
                         "body": body,
-                        "attachments": att_names,
+                        "attachments": att_info,
                     })
             return "Email not found."
         finally:
             client.disconnect()
 
-    def search_emails(self, query: str, folder: str = "INBOX", limit: int = 20) -> str:
-        """Search emails by query string (searches From, Subject, Body)."""
+    def get_attachment_url(
+        self,
+        email_id: str,
+        filename: str,
+        folder: str = "INBOX",
+        ftp_service: object | None = None,
+    ) -> str:
+        """Upload a specific attachment via FTP and return a shareable URL."""
+        if not ftp_service:
+            return "FTP upload not configured."
+
         client = self._create_client()
         try:
-            criteria = ["ALL"]
             messages = client.get_messages(
-                search_criteria=criteria,
+                search_criteria=["ALL"],
+                folder=folder,
+                include_attachments=True,
+            )
+            for msg_id, email_msg in messages:
+                if str(msg_id) == str(email_id):
+                    for a in email_msg.attachments or []:
+                        if a.filename == filename:
+                            try:
+                                url = ftp_service.upload(a.data, a.filename)
+                            except Exception:
+                                logger.warning(
+                                    "FTP upload failed for %s", a.filename
+                                )
+                                return f"FTP upload failed for '{filename}'."
+                            return json.dumps({
+                                "filename": a.filename,
+                                "url": url,
+                                "content_type": a.content_type,
+                            })
+                    return f"Attachment '{filename}' not found in email."
+            return "Email not found."
+        finally:
+            client.disconnect()
+
+    def search_emails(self, query: str, folder: str = "INBOX", limit: int = 20) -> str:
+        """Search emails by query string (searches From, Subject, Body).
+
+        Uses server-side IMAP SUBJECT/FROM search first. Falls back to
+        client-side filtering on the most recent *limit* emails when the
+        server-side search returns nothing.
+        """
+        logger.info("search_emails: query=%r, folder=%r, limit=%d", query, folder, limit)
+        client = self._create_client()
+        try:
+            folder, error = self._resolve_folder(client, folder)
+            if error:
+                logger.warning("search_emails: folder validation failed: %s", error)
+                return error
+
+            # Server-side IMAP search for subject and from
+            messages = client.get_messages(
+                search_criteria=["OR", "SUBJECT", query, "FROM", query],
                 folder=folder,
                 limit=limit,
                 include_attachments=False,
             )
-            if not messages:
-                return f"No emails found in {folder}."
 
-            query_lower = query.lower()
-            matches = []
-            for msg_id, email_msg in messages:
-                from_addr = (email_msg.from_address or "").lower()
-                subject = (email_msg.subject or "").lower()
-                body = ""
-                with contextlib.suppress(Exception):
-                    body = (email_msg.get_body(MIME_TEXT_PLAIN) or "").lower()
+            if messages:
+                matches = list(messages)
+                logger.info(
+                    "search_emails: server-side search returned %d result(s)", len(matches)
+                )
+            else:
+                logger.info("search_emails: server-side search returned nothing, falling back")
+                # Fallback: client-side filtering on recent emails
+                messages = client.get_messages(
+                    search_criteria=["ALL"],
+                    folder=folder,
+                    limit=limit,
+                    include_attachments=False,
+                )
+                if not messages:
+                    logger.info("search_emails: no emails found in folder %r", folder)
+                    return f"No emails found in {folder}."
 
-                if query_lower in from_addr or query_lower in subject or query_lower in body:
-                    matches.append((msg_id, email_msg))
+                logger.info(
+                    "search_emails: fetched %d email(s) for client-side filtering",
+                    len(messages),
+                )
+                query_lower = query.lower()
+                matches = []
+                for msg_id, email_msg in messages:
+                    from_addr = (email_msg.from_address or "").lower()
+                    subject = (email_msg.subject or "").lower()
+                    body = ""
+                    with contextlib.suppress(Exception):
+                        body = (email_msg.get_body(MIME_TEXT_PLAIN) or "").lower()
+
+                    if (
+                        query_lower in from_addr
+                        or query_lower in subject
+                        or query_lower in body
+                    ):
+                        matches.append((msg_id, email_msg))
+
+                logger.info(
+                    "search_emails: client-side filtering matched %d email(s)", len(matches)
+                )
 
             if not matches:
+                logger.info("search_emails: no matches for query=%r", query)
                 return f"No emails matching '{query}' found."
 
             results = []
@@ -141,6 +315,7 @@ class EmailService:
                     "subject": email_msg.subject or "",
                     "date": email_msg.date or "",
                 })
+            logger.info("search_emails: returning %d result(s)", len(results))
             return json.dumps({"results": results})
         finally:
             client.disconnect()
@@ -159,11 +334,16 @@ class EmailService:
         finally:
             client.disconnect()
 
-    def move_email(self, email_id: str, destination_folder: str) -> str:
+    def move_email(
+        self, email_id: str, destination_folder: str, source_folder: str = "INBOX"
+    ) -> str:
         """Move an email to a different folder."""
         client = self._create_client()
         try:
-            client.client.select_folder("INBOX")
+            source_folder, error = self._resolve_folder(client, source_folder)
+            if error:
+                return error
+            client.client.select_folder(source_folder)
             success = client.move_to_folder(email_id, destination_folder)
             if success:
                 return f"Email moved to '{destination_folder}'."
@@ -296,6 +476,8 @@ class EmailService:
                         info["location"] = invite.location
                     if invite.is_cancellation:
                         info["cancelled"] = True
+                    if invite.ics_data:
+                        info["ics_data"] = invite.ics_data.decode("utf-8", errors="replace")
                     return json.dumps(info)
             return "Email not found."
         finally:
@@ -390,6 +572,94 @@ class EmailService:
                     if success:
                         return "Reply sent."
                     return "Failed to send reply."
+            return "Email not found."
+        finally:
+            client.disconnect()
+
+    def forward_email(
+        self,
+        email_id: str,
+        to_addresses: list[str],
+        additional_message: str = "",
+        folder: str = "INBOX",
+    ) -> str:
+        """Forward an email preserving all attachments and inline images."""
+        client = self._create_client()
+        try:
+            messages = client.get_messages(
+                search_criteria=["ALL"],
+                folder=folder,
+                include_attachments=True,
+            )
+            for msg_id, email_msg in messages:
+                if str(msg_id) == str(email_id):
+                    success = client.forward_email(
+                        email_message=email_msg,
+                        to_addresses=to_addresses,
+                        sender_email=self._settings.from_address,
+                        smtp_server=self._settings.smtp.server,
+                        smtp_port=self._settings.smtp.port,
+                        smtp_username=self._settings.smtp.username,
+                        smtp_password=self._settings.smtp.password,
+                        additional_message=additional_message,
+                    )
+                    if success:
+                        return f"Email forwarded to {', '.join(to_addresses)}."
+                    return "Failed to forward email."
+            return "Email not found."
+        finally:
+            client.disconnect()
+
+    def draft_forward(
+        self,
+        email_id: str,
+        to_address: str,
+        additional_message: str = "",
+        folder: str = "INBOX",
+    ) -> str:
+        """Save a forward draft preserving all attachments and inline images."""
+        client = self._create_client()
+        try:
+            messages = client.get_messages(
+                search_criteria=["ALL"],
+                folder=folder,
+                include_attachments=True,
+            )
+            for msg_id, email_msg in messages:
+                if str(msg_id) == str(email_id):
+                    original_body = email_msg.get_body(MIME_TEXT_PLAIN) or ""
+                    original_from = email_msg.from_address or ""
+                    original_to = email_msg.raw_message.get("To", "")
+                    original_date = email_msg.date or ""
+                    original_subject = email_msg.subject or ""
+
+                    html_body = assemble_forward_html(
+                        additional_message=additional_message,
+                        original_from=original_from,
+                        original_to=original_to,
+                        original_date=original_date,
+                        original_subject=original_subject,
+                        original_body=original_body,
+                    )
+
+                    subject = make_forward_subject(original_subject)
+                    attachments = email_msg.attachments or []
+
+                    try:
+                        success = client.save_draft(
+                            to_addresses=[to_address],
+                            subject=subject,
+                            body=html_body,
+                            from_email=self._settings.from_address,
+                            content_type=MIME_TEXT_HTML,
+                            attachments=attachments,
+                        )
+                        if success:
+                            return "Forward draft saved."
+                        return "Failed to save forward draft."
+                    except Exception as e:
+                        logger.error("Error saving forward draft: %s", e)
+                        return "Failed to save forward draft."
             return "Email not found."
         finally:
             client.disconnect()

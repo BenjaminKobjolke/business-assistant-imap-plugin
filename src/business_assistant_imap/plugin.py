@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from business_assistant.agent.deps import Deps
 from business_assistant.plugins.registry import PluginInfo, PluginRegistry
@@ -21,6 +22,28 @@ from .greeting_builder import build_greeting
 logger = logging.getLogger(__name__)
 
 
+_FOLDER_PREFIX_RE = re.compile(
+    r'^folder:"([^"]+)"\s+(.+)$|^folder:(\S+)\s+(.+)$', re.IGNORECASE
+)
+
+
+def _extract_folder_from_query(query: str, folder: str) -> tuple[str, str]:
+    """Extract folder from query if the agent used 'folder:name query' syntax.
+
+    Supports both ``folder:Name query`` and ``folder:"Name With Spaces" query``.
+    Only overrides the folder when the caller still has the default 'INBOX'.
+    Returns (cleaned_query, folder).
+    """
+    if folder != "INBOX":
+        return query, folder
+    match = _FOLDER_PREFIX_RE.match(query.strip())
+    if match:
+        if match.group(1) is not None:
+            return match.group(2).strip(), match.group(1)
+        return match.group(4).strip(), match.group(3)
+    return query, folder
+
+
 def _get_service(ctx: RunContext[Deps]) -> EmailService:
     """Retrieve the EmailService from plugin_data."""
     return ctx.deps.plugin_data[PLUGIN_DATA_EMAIL_SERVICE]
@@ -28,7 +51,18 @@ def _get_service(ctx: RunContext[Deps]) -> EmailService:
 
 def _list_inbox(ctx: RunContext[Deps], limit: int = 20) -> str:
     """List recent emails from the inbox. Default limit: 20."""
+    logger.info("list_inbox: limit=%d", limit)
     return _get_service(ctx).list_inbox(limit=limit)
+
+
+def _list_messages(ctx: RunContext[Deps], folder: str = "INBOX", limit: int = 20) -> str:
+    """List recent emails from a specific mailbox folder.
+
+    Use list_folders to discover available folder names.
+    Examples: folder="Sent", folder="Company/Clients/ProjectName"
+    """
+    logger.info("list_messages: folder=%r limit=%d", folder, limit)
+    return _get_service(ctx).list_messages(folder=folder, limit=limit)
 
 
 def _show_email(ctx: RunContext[Deps], email_id: str, folder: str = "INBOX") -> str:
@@ -36,63 +70,103 @@ def _show_email(ctx: RunContext[Deps], email_id: str, folder: str = "INBOX") -> 
 
     Use folder='Sent' for sent emails.
     """
+    logger.info("show_email: email_id=%r folder=%r", email_id, folder)
     return _get_service(ctx).show_email(email_id, folder)
 
 
-def _search_emails(ctx: RunContext[Deps], query: str) -> str:
+def _get_attachment_url(
+    ctx: RunContext[Deps], email_id: str, filename: str, folder: str = "INBOX"
+) -> str:
+    """Upload an email attachment to get a shareable URL.
+
+    Use when user asks to see/download an attachment or image from an email.
+    """
+    logger.info(
+        "get_attachment_url: email_id=%r filename=%r folder=%r",
+        email_id, filename, folder,
+    )
+    ftp_service = ctx.deps.plugin_data.get("ftp_upload")
+    return _get_service(ctx).get_attachment_url(
+        email_id, filename, folder, ftp_service=ftp_service
+    )
+
+
+def _search_emails(ctx: RunContext[Deps], query: str, folder: str = "INBOX") -> str:
     """Search emails by query string. Checks memory for aliases first.
 
     The query is matched against From, Subject, and Body fields.
+    Use the folder parameter to search in a specific mailbox folder
+    (e.g., folder="Company/Clients/ProjectName"). Do NOT put the folder
+    name in the query — use the folder parameter instead.
     """
+    # Fallback: extract folder from query if agent used "folder:name" syntax
+    query, folder = _extract_folder_from_query(query, folder)
+
     memory = ctx.deps.memory
     alias = memory.get(query.lower())
     if alias:
+        logger.info("search_emails: resolved alias %r -> %r", query, alias)
         query = alias
-    return _get_service(ctx).search_emails(query)
+    logger.info("search_emails: query=%r folder=%r", query, folder)
+    return _get_service(ctx).search_emails(query, folder=folder)
 
 
 def _list_folders(ctx: RunContext[Deps]) -> str:
     """List all mailbox folders."""
+    logger.info("list_folders: listing all mailbox folders")
     return _get_service(ctx).list_folders()
 
 
-def _move_email(ctx: RunContext[Deps], email_id: str, destination_folder: str) -> str:
+def _move_email(
+    ctx: RunContext[Deps], email_id: str, destination_folder: str, source_folder: str = "INBOX"
+) -> str:
     """Move an email to a different folder."""
-    return _get_service(ctx).move_email(email_id, destination_folder)
+    logger.info(
+        "move_email: email_id=%r destination=%r source=%r",
+        email_id, destination_folder, source_folder,
+    )
+    return _get_service(ctx).move_email(email_id, destination_folder, source_folder=source_folder)
 
 
 def _trash_email(ctx: RunContext[Deps], email_id: str) -> str:
     """Move an email to the Trash folder."""
+    logger.info("trash_email: email_id=%r", email_id)
     return _get_service(ctx).trash_email(email_id)
 
 
 def _get_unread_count(ctx: RunContext[Deps]) -> str:
     """Get the number of unread emails in the inbox."""
+    logger.info("get_unread_count")
     return _get_service(ctx).get_unread_count()
 
 
 def _get_meeting_info(ctx: RunContext[Deps], email_id: str) -> str:
     """Get meeting/calendar details from an email containing ICS data."""
+    logger.info("get_meeting_info: email_id=%r", email_id)
     return _get_service(ctx).get_meeting_info(email_id)
 
 
 def _get_appointments(ctx: RunContext[Deps], folder: str = "INBOX") -> str:
     """List upcoming appointments from emails with ICS data in the given folder."""
+    logger.info("get_appointments: folder=%r", folder)
     return _get_service(ctx).get_appointments(folder)
 
 
 def _get_meeting_links(ctx: RunContext[Deps], email_id: str) -> str:
     """Extract meeting links (Teams, Zoom, Google Meet) from an email."""
+    logger.info("get_meeting_links: email_id=%r", email_id)
     return _get_service(ctx).get_meeting_links(email_id)
 
 
 def _detect_invite(ctx: RunContext[Deps], email_id: str) -> str:
     """Check if an email contains a calendar invite and show details."""
+    logger.info("detect_invite: email_id=%r", email_id)
     return _get_service(ctx).detect_invite_in_email(email_id)
 
 
 def _send_rsvp(ctx: RunContext[Deps], email_id: str, status: str = "ACCEPTED") -> str:
     """Accept or decline a meeting invite. Status: ACCEPTED, DECLINED, or TENTATIVE."""
+    logger.info("send_rsvp: email_id=%r status=%r", email_id, status)
     return _get_service(ctx).send_rsvp_for_email(email_id, status)
 
 
@@ -100,6 +174,7 @@ def _draft_reply(
     ctx: RunContext[Deps], email_id: str, reply_body: str, greeting: str = ""
 ) -> str:
     """Save a reply draft to an email in the Drafts folder."""
+    logger.info("draft_reply: email_id=%r", email_id)
     return _get_service(ctx).draft_reply(email_id, reply_body, greeting)
 
 
@@ -107,7 +182,46 @@ def _send_reply(
     ctx: RunContext[Deps], email_id: str, reply_body: str, greeting: str = ""
 ) -> str:
     """Send a reply to an email directly via SMTP."""
+    logger.info("send_reply: email_id=%r", email_id)
     return _get_service(ctx).send_reply(email_id, reply_body, greeting)
+
+
+def _forward_email(
+    ctx: RunContext[Deps],
+    email_id: str,
+    to_addresses: list[str],
+    additional_message: str = "",
+    folder: str = "INBOX",
+) -> str:
+    """Forward an email to one or more recipients, preserving all attachments and inline images.
+
+    Use folder parameter if the email is not in INBOX (e.g., folder="Sent").
+    """
+    logger.info(
+        "forward_email: email_id=%r to=%r folder=%r", email_id, to_addresses, folder
+    )
+    return _get_service(ctx).forward_email(
+        email_id, to_addresses, additional_message, folder
+    )
+
+
+def _draft_forward(
+    ctx: RunContext[Deps],
+    email_id: str,
+    to_address: str,
+    additional_message: str = "",
+    folder: str = "INBOX",
+) -> str:
+    """Save a forward draft preserving all attachments and inline images.
+
+    Use folder parameter if the email is not in INBOX (e.g., folder="Sent").
+    """
+    logger.info(
+        "draft_forward: email_id=%r to=%r folder=%r", email_id, to_address, folder
+    )
+    return _get_service(ctx).draft_forward(
+        email_id, to_address, additional_message, folder
+    )
 
 
 def _search_sent_to(ctx: RunContext[Deps], email_address: str, limit: int = 3) -> str:
@@ -115,6 +229,7 @@ def _search_sent_to(ctx: RunContext[Deps], email_address: str, limit: int = 3) -
 
     Returns email body snippets so you can detect salutation patterns.
     """
+    logger.info("search_sent_to: email_address=%r limit=%d", email_address, limit)
     return _get_service(ctx).search_sent_to(email_address, limit)
 
 
@@ -122,6 +237,7 @@ def _build_greeting(ctx: RunContext[Deps], salutation: str = "", skip: bool = Fa
     """Build a time-aware greeting. Returns 'Guten Morgen <salutation>' before 10 AM,
     'Hallo <salutation>' otherwise. Returns empty string if skip is True.
     """
+    logger.info("build_greeting: salutation=%r skip=%r", salutation, skip)
     return build_greeting(salutation, skip)
 
 
@@ -131,6 +247,10 @@ def register(registry: PluginRegistry) -> None:
     Reads IMAP/SMTP settings from environment. Skips registration
     if IMAP_SERVER is not configured.
     """
+    from business_assistant.config.log_setup import add_plugin_logging
+
+    add_plugin_logging("imap", "business_assistant_imap")
+
     email_settings = load_email_settings()
     if email_settings is None:
         logger.info("IMAP plugin: IMAP_SERVER not configured, skipping registration")
@@ -140,7 +260,9 @@ def register(registry: PluginRegistry) -> None:
 
     tools = [
         Tool(_list_inbox, name="list_inbox"),
+        Tool(_list_messages, name="list_messages"),
         Tool(_show_email, name="show_email"),
+        Tool(_get_attachment_url, name="get_attachment_url"),
         Tool(_search_emails, name="search_emails"),
         Tool(_list_folders, name="list_folders"),
         Tool(_move_email, name="move_email"),
@@ -153,6 +275,8 @@ def register(registry: PluginRegistry) -> None:
         Tool(_send_rsvp, name="send_rsvp"),
         Tool(_draft_reply, name="draft_reply"),
         Tool(_send_reply, name="send_reply"),
+        Tool(_forward_email, name="forward_email"),
+        Tool(_draft_forward, name="draft_forward"),
         Tool(_search_sent_to, name="search_sent_to"),
         Tool(_build_greeting, name="build_greeting"),
     ]
