@@ -39,7 +39,7 @@ RSVP_TENTATIVE = "TENTATIVE"
 # System prompt extra
 SYSTEM_PROMPT_EMAIL = """You have access to email tools for managing the user's IMAP mailbox:
 - list_inbox: List recent emails from the inbox
-- show_email: Show full details of a specific email by ID
+- show_email: Show full details of a specific email by ID (use folder='Sent' for sent emails)
 - search_emails: Search emails by query (from, subject, body)
 - list_folders: List all mailbox folders
 - move_email: Move an email to a different folder

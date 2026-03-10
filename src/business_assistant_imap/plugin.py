@@ -31,9 +31,12 @@ def _list_inbox(ctx: RunContext[Deps], limit: int = 20) -> str:
     return _get_service(ctx).list_inbox(limit=limit)
 
 
-def _show_email(ctx: RunContext[Deps], email_id: str) -> str:
-    """Show full details of a specific email by its ID."""
-    return _get_service(ctx).show_email(email_id)
+def _show_email(ctx: RunContext[Deps], email_id: str, folder: str = "INBOX") -> str:
+    """Show full details of a specific email by its ID.
+
+    Use folder='Sent' for sent emails.
+    """
+    return _get_service(ctx).show_email(email_id, folder)
 
 
 def _search_emails(ctx: RunContext[Deps], query: str) -> str:

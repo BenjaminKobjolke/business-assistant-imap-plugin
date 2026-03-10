@@ -92,9 +92,11 @@ class TestEmailService:
         mock_client.connect.return_value = True
         mock_client.get_messages.return_value = [
             (
-                "1",
+                "42",
                 FakeEmailMessage(
                     to_address="alice@example.com",
+                    subject="Hintergrundbilder",
+                    date="Mon, 09 Mar 2026 14:30:00 +0100",
                     body_plain="Hallo Frau Schmidt, hier ist der Bericht.",
                 ),
             ),
@@ -106,6 +108,9 @@ class TestEmailService:
 
         assert "alice@example.com" in result
         assert "Hallo Frau Schmidt" in result
+        assert "[42]" in result
+        assert "Subject: Hintergrundbilder" in result
+        assert "Date: Mon, 09 Mar 2026" in result
         # Verify IMAP TO search was used
         mock_client.get_messages.assert_called_once_with(
             search_criteria=["TO", "alice@example.com"],
@@ -127,6 +132,35 @@ class TestEmailService:
         result = service.search_sent_to("alice@example.com")
 
         assert "No sent emails to alice@example.com" in result
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_show_email_sent_folder(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_messages.return_value = [
+            (
+                "42",
+                FakeEmailMessage(
+                    message_id="42",
+                    subject="Hintergrundbilder",
+                    body_plain="Hier ist der Link.",
+                ),
+            ),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.show_email("42", folder="Sent")
+
+        assert "Subject: Hintergrundbilder" in result
+        assert "Hier ist der Link." in result
+        mock_client.get_messages.assert_called_once_with(
+            search_criteria=["ALL"],
+            folder="Sent",
+            include_attachments=True,
+        )
 
     @patch("business_assistant_imap.email_service.ImapClient")
     def test_connection_failure(

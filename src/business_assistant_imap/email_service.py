@@ -72,13 +72,13 @@ class EmailService:
         finally:
             client.disconnect()
 
-    def show_email(self, email_id: str) -> str:
+    def show_email(self, email_id: str, folder: str = "INBOX") -> str:
         """Show full details of a specific email."""
         client = self._create_client()
         try:
             messages = client.get_messages(
                 search_criteria=["ALL"],
-                folder="INBOX",
+                folder=folder,
                 include_attachments=True,
             )
             for msg_id, email_msg in messages:
@@ -398,8 +398,8 @@ class EmailService:
             if not messages:
                 return f"No sent emails to {email_address} found."
 
-            bodies: list[str] = []
-            for _msg_id, email_msg in messages:
+            entries: list[tuple[str, str, str, str]] = []
+            for msg_id, email_msg in messages:
                 body = ""
                 with contextlib.suppress(Exception):
                     body = email_msg.get_body(MIME_TEXT_PLAIN) or ""
@@ -409,16 +409,21 @@ class EmailService:
                         body = re.sub(r"<[^>]+>", "", raw_html)
                         body = html.unescape(body)
 
-                if body:
-                    clean = " ".join(body.split())
-                    bodies.append(clean[:500])
+                clean = " ".join(body.split())[:500] if body else ""
+                subject = email_msg.subject or "(no subject)"
+                date_str = email_msg.date or ""
+                entries.append((str(msg_id), subject, date_str, clean))
 
-            if not bodies:
+            if not entries:
                 return f"No sent emails to {email_address} found."
 
-            lines = [f"Recent sent emails to {email_address} ({len(bodies)} found):"]
-            for i, body_text in enumerate(bodies, 1):
-                lines.append(f"\n--- Email {i} ---\n{body_text}")
+            lines = [f"Recent sent emails to {email_address} ({len(entries)} found):"]
+            for i, (msg_id, subject, date_str, body_text) in enumerate(entries, 1):
+                lines.append(
+                    f"\n--- Email {i} ---\n"
+                    f"[{msg_id}] Subject: {subject} | Date: {date_str}\n"
+                    f"{body_text}"
+                )
             return "\n".join(lines)
         finally:
             client.disconnect()
