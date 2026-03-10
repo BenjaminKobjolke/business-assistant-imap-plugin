@@ -15,6 +15,13 @@ from imap_client_lib.client import ImapClient
 
 from .config import EmailSettings
 from .constants import (
+    FILTER_ACTION_MOVE,
+    FILTER_ACTION_TRASH,
+    FILTER_INVALID_ACTION,
+    FILTER_INVALID_REGEX,
+    FILTER_MOVE_NO_DESTINATION,
+    FILTER_NO_PATTERN,
+    FILTER_VALID_ACTIONS,
     FOLDER_NOT_FOUND,
     FOLDER_NOT_FOUND_NO_SUGGESTIONS,
     MAX_FOLDER_SUGGESTIONS,
@@ -238,6 +245,95 @@ class EmailService:
         finally:
             client.disconnect()
 
+    def filter_emails(
+        self,
+        subject_pattern: str = "",
+        from_pattern: str = "",
+        action: str = "trash",
+        destination: str = "",
+        folder: str = "INBOX",
+        limit: int = 50,
+        dry_run: bool = True,
+    ) -> str:
+        """Filter emails by subject/from regex patterns.
+
+        dry_run=True previews matches without acting.
+        dry_run=False applies the action (trash or move) to matches.
+        """
+        # Validate inputs before connecting
+        if not subject_pattern and not from_pattern:
+            return FILTER_NO_PATTERN
+        if action not in FILTER_VALID_ACTIONS:
+            return FILTER_INVALID_ACTION.format(action=action)
+        if action == FILTER_ACTION_MOVE and not destination:
+            return FILTER_MOVE_NO_DESTINATION
+
+        # Validate regex patterns
+        try:
+            if subject_pattern:
+                re.compile(subject_pattern)
+            if from_pattern:
+                re.compile(from_pattern)
+        except re.error as e:
+            return FILTER_INVALID_REGEX.format(error=e)
+
+        client = self._create_client()
+        try:
+            folder, error = self._resolve_folder(client, folder)
+            if error:
+                return error
+
+            messages = client.get_all_messages(folder=folder, limit=limit)
+            if not messages:
+                return json.dumps({
+                    "dry_run": dry_run,
+                    "matched": 0,
+                    "total_scanned": 0,
+                    "results": [],
+                })
+
+            results: list[dict[str, str]] = []
+            for msg_id, email_msg in messages:
+                subject = email_msg.subject or ""
+                from_addr = email_msg.from_address or ""
+
+                subject_match = (
+                    bool(re.search(subject_pattern, subject, re.IGNORECASE))
+                    if subject_pattern
+                    else True
+                )
+                from_match = (
+                    bool(re.search(from_pattern, from_addr, re.IGNORECASE))
+                    if from_pattern
+                    else True
+                )
+
+                if subject_match and from_match:
+                    results.append({
+                        "_id": str(msg_id),
+                        "from": from_addr,
+                        "subject": subject,
+                        "date": email_msg.date or "",
+                    })
+
+            if not dry_run and results:
+                client.client.select_folder(folder)
+                for item in results:
+                    eid = item["_id"]
+                    if action == FILTER_ACTION_TRASH:
+                        client.move_to_folder(eid, "Trash")
+                    elif action == FILTER_ACTION_MOVE:
+                        client.move_to_folder(eid, destination)
+
+            return json.dumps({
+                "dry_run": dry_run,
+                "matched": len(results),
+                "total_scanned": len(messages),
+                "results": results,
+            })
+        finally:
+            client.disconnect()
+
     def search_emails(self, query: str, folder: str = "INBOX", limit: int = 20) -> str:
         """Search emails by query string (searches From, Subject, Body).
 
@@ -369,11 +465,11 @@ class EmailService:
         finally:
             client.disconnect()
 
-    def get_meeting_info(self, email_id: str) -> str:
+    def get_meeting_info(self, email_id: str, folder: str = "INBOX") -> str:
         """Get meeting/calendar details from an email."""
         client = self._create_client()
         try:
-            messages = client.get_all_messages(folder="INBOX")
+            messages = client.get_all_messages(folder=folder)
             for msg_id, email_msg in (messages or []):
                 if str(msg_id) == str(email_id):
                     dtstart, dtend = extract_meeting_times(email_msg)
@@ -432,11 +528,11 @@ class EmailService:
         finally:
             client.disconnect()
 
-    def get_meeting_links(self, email_id: str) -> str:
+    def get_meeting_links(self, email_id: str, folder: str = "INBOX") -> str:
         """Extract meeting links (Teams, Zoom, Meet) from an email."""
         client = self._create_client()
         try:
-            messages = client.get_all_messages(folder="INBOX")
+            messages = client.get_all_messages(folder=folder)
             for msg_id, email_msg in (messages or []):
                 if str(msg_id) == str(email_id):
                     ics_data = extract_ics_data(email_msg)
@@ -452,11 +548,11 @@ class EmailService:
         finally:
             client.disconnect()
 
-    def detect_invite_in_email(self, email_id: str) -> str:
+    def detect_invite_in_email(self, email_id: str, folder: str = "INBOX") -> str:
         """Check if an email contains a calendar invite."""
         client = self._create_client()
         try:
-            messages = client.get_all_messages(folder="INBOX")
+            messages = client.get_all_messages(folder=folder)
             for msg_id, email_msg in (messages or []):
                 if str(msg_id) == str(email_id):
                     invite = detect_invite(str(msg_id), email_msg)
@@ -483,11 +579,13 @@ class EmailService:
         finally:
             client.disconnect()
 
-    def send_rsvp_for_email(self, email_id: str, status: str = "ACCEPTED") -> str:
+    def send_rsvp_for_email(
+        self, email_id: str, status: str = "ACCEPTED", folder: str = "INBOX"
+    ) -> str:
         """Accept or decline a meeting invite by sending an RSVP."""
         client = self._create_client()
         try:
-            messages = client.get_all_messages(folder="INBOX")
+            messages = client.get_all_messages(folder=folder)
             for msg_id, email_msg in (messages or []):
                 if str(msg_id) == str(email_id):
                     invite = detect_invite(str(msg_id), email_msg)
@@ -507,11 +605,13 @@ class EmailService:
         finally:
             client.disconnect()
 
-    def draft_reply(self, email_id: str, reply_body: str, greeting: str = "") -> str:
+    def draft_reply(
+        self, email_id: str, reply_body: str, greeting: str = "", folder: str = "INBOX"
+    ) -> str:
         """Save a reply draft to an email."""
         client = self._create_client()
         try:
-            messages = client.get_all_messages(folder="INBOX")
+            messages = client.get_all_messages(folder=folder)
             for msg_id, email_msg in (messages or []):
                 if str(msg_id) == str(email_id):
                     original_body = email_msg.get_body(MIME_TEXT_PLAIN) or ""
@@ -524,7 +624,9 @@ class EmailService:
                         original_subject=email_msg.subject or "",
                         original_body=original_body,
                     )
-                    html_body = assemble_reply_html(content)
+                    html_body = assemble_reply_html(
+                        content, footer_html=self._settings.footer_html
+                    )
                     success = save_draft_to_imap(
                         client=client,
                         to_address=content.to_address,
@@ -539,11 +641,13 @@ class EmailService:
         finally:
             client.disconnect()
 
-    def send_reply(self, email_id: str, reply_body: str, greeting: str = "") -> str:
+    def send_reply(
+        self, email_id: str, reply_body: str, greeting: str = "", folder: str = "INBOX"
+    ) -> str:
         """Send a reply to an email directly via SMTP."""
         client = self._create_client()
         try:
-            messages = client.get_all_messages(folder="INBOX")
+            messages = client.get_all_messages(folder=folder)
             for msg_id, email_msg in (messages or []):
                 if str(msg_id) == str(email_id):
                     original_body = email_msg.get_body(MIME_TEXT_PLAIN) or ""
@@ -556,7 +660,9 @@ class EmailService:
                         original_subject=email_msg.subject or "",
                         original_body=original_body,
                     )
-                    html_body = assemble_reply_html(content)
+                    html_body = assemble_reply_html(
+                        content, footer_html=self._settings.footer_html
+                    )
 
                     success = client.send_email(
                         to_addresses=[content.to_address],
@@ -640,6 +746,7 @@ class EmailService:
                         original_date=original_date,
                         original_subject=original_subject,
                         original_body=original_body,
+                        footer_html=self._settings.footer_html,
                     )
 
                     subject = make_forward_subject(original_subject)

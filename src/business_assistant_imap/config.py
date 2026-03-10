@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from .constants import (
+    DEFAULT_EMAIL_FOOTER_PATH,
     DEFAULT_IMAP_PORT,
     DEFAULT_SMTP_PORT,
+    ENV_EMAIL_FOOTER_PATH,
     ENV_EMAIL_FROM_ADDRESS,
     ENV_IMAP_PASSWORD,
     ENV_IMAP_PORT,
@@ -49,6 +52,7 @@ class EmailSettings:
     imap: ImapSettings
     smtp: SmtpSettings
     from_address: str
+    footer_html: str = ""
 
 
 def load_email_settings() -> EmailSettings | None:
@@ -84,4 +88,9 @@ def load_email_settings() -> EmailSettings | None:
 
     from_address = os.environ.get(ENV_EMAIL_FROM_ADDRESS, imap_username)
 
-    return EmailSettings(imap=imap, smtp=smtp, from_address=from_address)
+    footer_html = ""
+    footer_path = Path(os.environ.get(ENV_EMAIL_FOOTER_PATH, DEFAULT_EMAIL_FOOTER_PATH))
+    if footer_path.is_file():
+        footer_html = footer_path.read_text(encoding="utf-8")
+
+    return EmailSettings(imap=imap, smtp=smtp, from_address=from_address, footer_html=footer_html)

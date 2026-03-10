@@ -47,6 +47,7 @@ def assemble_forward_html(
     original_date: str,
     original_subject: str,
     original_body: str,
+    footer_html: str = "",
 ) -> str:
     """Build HTML body for a forwarded email."""
     html_additional = additional_message.replace("\n", "<br>") if additional_message else ""
@@ -59,9 +60,17 @@ def assemble_forward_html(
         {html_additional}
     </div>"""
 
+    footer_block = ""
+    if footer_html:
+        footer_block = f"""
+    <div style="margin-top: 20px;">
+        {footer_html}
+    </div>"""
+
     return f"""
 <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6;">
     {additional_block}
+    {footer_block}
 
     <hr style="margin: 20px 0; border: none; border-top: 1px solid #ccc;">
 
@@ -80,7 +89,7 @@ padding: 10px; border-left: 3px solid #ddd;">
 """
 
 
-def assemble_reply_html(content: DraftEmailContent) -> str:
+def assemble_reply_html(content: DraftEmailContent, footer_html: str = "") -> str:
     """Build HTML body from greeting + body + quoted original."""
     html_body_text = content.body_text.replace("\n", "<br>")
     html_original = content.original_body.replace("\n", "<br>")
@@ -89,12 +98,20 @@ def assemble_reply_html(content: DraftEmailContent) -> str:
     if content.greeting:
         greeting_block = f'<div style="margin-bottom: 10px;">{content.greeting},</div>'
 
+    footer_block = ""
+    if footer_html:
+        footer_block = f"""
+    <div style="margin-top: 20px;">
+        {footer_html}
+    </div>"""
+
     return f"""
 <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6;">
     {greeting_block}
     <div style="margin-bottom: 20px;">
         {html_body_text}
     </div>
+    {footer_block}
 
     <hr style="margin: 20px 0; border: none; border-top: 1px solid #ccc;">
 

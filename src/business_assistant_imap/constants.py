@@ -11,10 +11,12 @@ ENV_SMTP_PORT = "SMTP_PORT"
 ENV_SMTP_USERNAME = "SMTP_USERNAME"
 ENV_SMTP_PASSWORD = "SMTP_PASSWORD"
 ENV_EMAIL_FROM_ADDRESS = "EMAIL_FROM_ADDRESS"
+ENV_EMAIL_FOOTER_PATH = "EMAIL_FOOTER_PATH"
 
 # Defaults
 DEFAULT_IMAP_PORT = 993
 DEFAULT_SMTP_PORT = 587
+DEFAULT_EMAIL_FOOTER_PATH = "data/footer.html"
 
 # MIME types
 MIME_TEXT_CALENDAR = "text/calendar"
@@ -47,6 +49,17 @@ FOLDER_NOT_FOUND_NO_SUGGESTIONS = (
 )
 MAX_FOLDER_SUGGESTIONS = 3
 
+# Filter actions
+FILTER_ACTION_MOVE = "move"
+FILTER_ACTION_TRASH = "trash"
+FILTER_VALID_ACTIONS = {FILTER_ACTION_MOVE, FILTER_ACTION_TRASH}
+
+# Filter error messages
+FILTER_NO_PATTERN = "At least one pattern (subject_pattern or from_pattern) is required."
+FILTER_INVALID_ACTION = "Invalid action '{action}'. Valid actions: move, trash."
+FILTER_MOVE_NO_DESTINATION = "destination folder is required when action is 'move'."
+FILTER_INVALID_REGEX = "Invalid regex pattern: {error}"
+
 # System prompt extra
 SYSTEM_PROMPT_EMAIL = """You have access to email tools for managing the user's IMAP mailbox:
 - list_inbox: List recent emails from the inbox
@@ -63,16 +76,20 @@ Do NOT put the folder name in the query string.
 - move_email: Move an email to a different folder
 - trash_email: Move an email to the Trash folder
 - get_unread_count: Get the number of unread emails
-- get_meeting_info: Get meeting/calendar details from an email
+- get_meeting_info: Get meeting/calendar details from an email (use folder param if not in INBOX)
 - get_appointments: List upcoming appointments from a meetings folder
-- get_meeting_links: Extract meeting links (Teams, Zoom, Meet) from an email
-- detect_invite: Check if an email contains a calendar invite
-- send_rsvp: Accept or decline a meeting invite
-- draft_reply: Save a reply draft to an email
-- send_reply: Send a reply to an email directly
+- get_meeting_links: Extract meeting links (Teams, Zoom, Meet) from an email \
+(use folder param if not in INBOX)
+- detect_invite: Check if an email contains a calendar invite \
+(use folder param if not in INBOX)
+- send_rsvp: Accept or decline a meeting invite (use folder param if not in INBOX)
+- draft_reply: Save a reply draft to an email (use folder param if not in INBOX)
+- send_reply: Send a reply to an email directly (use folder param if not in INBOX)
 - forward_email: Forward an email preserving all attachments and inline images
 - draft_forward: Save a forward draft preserving all attachments and inline images
 - search_sent_to: Search Sent folder for recent emails to a specific address
+- filter_emails: Filter emails by subject/from regex patterns. Always dry_run=True first, \
+then confirm with user before applying actions (trash or move).
 - build_greeting: Build a time-aware greeting (Guten Morgen/Hallo + salutation)
 
 When searching for emails by person name, always check memory first for aliases \
@@ -102,6 +119,13 @@ When a user asks to see an image, picture, attachment, or file from an email:
 3. Share the returned URL(s) with the user so they can view/download directly
 If the email has image attachments and the user asks to "see" or "show" them, ALWAYS call \
 get_attachment_url — do NOT tell the user you cannot display images.
+
+## Email filtering — IMPORTANT
+When the user asks to filter, bulk-delete, or clean up emails:
+1. ALWAYS call filter_emails with dry_run=True first to preview matches
+2. Show the user how many emails matched and list their subjects
+3. Only call filter_emails with dry_run=False after the user explicitly confirms
+Never skip the dry-run step. This prevents accidental data loss.
 
 ## Reply workflow — IMPORTANT
 

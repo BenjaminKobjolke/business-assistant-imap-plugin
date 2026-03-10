@@ -65,6 +65,35 @@ class TestAssembleForwardHtml:
         assert "Forwarded message" in html
         assert "Body." in html
 
+    def test_forward_with_footer(self) -> None:
+        footer = "<b>XIDA GmbH</b><br>09131 - 940 5 270"
+        html = assemble_forward_html(
+            additional_message="FYI",
+            original_from="alice@example.com",
+            original_to="user@example.com",
+            original_date="Mon, 10 Mar 2026",
+            original_subject="Test",
+            original_body="Body.",
+            footer_html=footer,
+        )
+        assert footer in html
+        # Footer should appear before the HR / forwarded message block
+        footer_pos = html.index(footer)
+        hr_pos = html.index("Forwarded message")
+        assert footer_pos < hr_pos
+
+    def test_forward_without_footer(self) -> None:
+        html = assemble_forward_html(
+            additional_message="FYI",
+            original_from="alice@example.com",
+            original_to="user@example.com",
+            original_date="Mon, 10 Mar 2026",
+            original_subject="Test",
+            original_body="Body.",
+            footer_html="",
+        )
+        assert "margin-top: 20px" not in html
+
 
 class TestAssembleReplyHtml:
     def test_basic_reply(self) -> None:
@@ -110,3 +139,34 @@ class TestAssembleReplyHtml:
         html = assemble_reply_html(content)
         assert "Line 1<br>Line 2" in html
         assert "Orig line 1<br>Orig line 2" in html
+
+    def test_reply_with_footer(self) -> None:
+        footer = "<b>XIDA GmbH</b><br>09131 - 940 5 270"
+        content = DraftEmailContent(
+            to_address="recipient@example.com",
+            subject="Re: Test",
+            greeting="Hi Bob",
+            body_text="Thanks for your email.",
+            original_from="bob@example.com",
+            original_subject="Test",
+            original_body="Original message here.",
+        )
+        html = assemble_reply_html(content, footer_html=footer)
+        assert footer in html
+        # Footer should appear between body and original message
+        footer_pos = html.index(footer)
+        original_pos = html.index("-----Original Message-----")
+        assert footer_pos < original_pos
+
+    def test_reply_without_footer(self) -> None:
+        content = DraftEmailContent(
+            to_address="recipient@example.com",
+            subject="Re: Test",
+            greeting="",
+            body_text="Body text.",
+            original_from="bob@example.com",
+            original_subject="Test",
+            original_body="Original.",
+        )
+        html = assemble_reply_html(content, footer_html="")
+        assert "margin-top: 20px" not in html
