@@ -211,3 +211,6 @@ __marimo__/
 # Code analysis
 tools/analyze_code_config.bat
 code_analysis_results/
+
+# Claude Code
+.claude/
