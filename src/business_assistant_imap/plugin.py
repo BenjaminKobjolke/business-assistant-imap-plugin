@@ -91,6 +91,38 @@ def _get_attachment_url(
     )
 
 
+def _filter_emails(
+    ctx: RunContext[Deps],
+    subject_pattern: str = "",
+    from_pattern: str = "",
+    action: str = "trash",
+    destination: str = "",
+    folder: str = "INBOX",
+    limit: int = 50,
+    dry_run: bool = True,
+) -> str:
+    """Filter emails by subject/from regex patterns.
+
+    Always use dry_run=True first to preview matches.
+    Set dry_run=False only after user confirms.
+    action: 'trash' (default) or 'move' (requires destination).
+    Patterns use case-insensitive regex. Both patterns must match (AND logic).
+    """
+    logger.info(
+        "filter_emails: subject=%r from=%r action=%r dry_run=%r folder=%r",
+        subject_pattern, from_pattern, action, dry_run, folder,
+    )
+    return _get_service(ctx).filter_emails(
+        subject_pattern=subject_pattern,
+        from_pattern=from_pattern,
+        action=action,
+        destination=destination,
+        folder=folder,
+        limit=limit,
+        dry_run=dry_run,
+    )
+
+
 def _search_emails(ctx: RunContext[Deps], query: str, folder: str = "INBOX") -> str:
     """Search emails by query string. Checks memory for aliases first.
 
@@ -140,10 +172,15 @@ def _get_unread_count(ctx: RunContext[Deps]) -> str:
     return _get_service(ctx).get_unread_count()
 
 
-def _get_meeting_info(ctx: RunContext[Deps], email_id: str) -> str:
-    """Get meeting/calendar details from an email containing ICS data."""
-    logger.info("get_meeting_info: email_id=%r", email_id)
-    return _get_service(ctx).get_meeting_info(email_id)
+def _get_meeting_info(
+    ctx: RunContext[Deps], email_id: str, folder: str = "INBOX"
+) -> str:
+    """Get meeting/calendar details from an email containing ICS data.
+
+    Use folder parameter if the email is not in INBOX.
+    """
+    logger.info("get_meeting_info: email_id=%r folder=%r", email_id, folder)
+    return _get_service(ctx).get_meeting_info(email_id, folder)
 
 
 def _get_appointments(ctx: RunContext[Deps], folder: str = "INBOX") -> str:
@@ -152,38 +189,70 @@ def _get_appointments(ctx: RunContext[Deps], folder: str = "INBOX") -> str:
     return _get_service(ctx).get_appointments(folder)
 
 
-def _get_meeting_links(ctx: RunContext[Deps], email_id: str) -> str:
-    """Extract meeting links (Teams, Zoom, Google Meet) from an email."""
-    logger.info("get_meeting_links: email_id=%r", email_id)
-    return _get_service(ctx).get_meeting_links(email_id)
+def _get_meeting_links(
+    ctx: RunContext[Deps], email_id: str, folder: str = "INBOX"
+) -> str:
+    """Extract meeting links (Teams, Zoom, Google Meet) from an email.
+
+    Use folder parameter if the email is not in INBOX.
+    """
+    logger.info("get_meeting_links: email_id=%r folder=%r", email_id, folder)
+    return _get_service(ctx).get_meeting_links(email_id, folder)
 
 
-def _detect_invite(ctx: RunContext[Deps], email_id: str) -> str:
-    """Check if an email contains a calendar invite and show details."""
-    logger.info("detect_invite: email_id=%r", email_id)
-    return _get_service(ctx).detect_invite_in_email(email_id)
+def _detect_invite(
+    ctx: RunContext[Deps], email_id: str, folder: str = "INBOX"
+) -> str:
+    """Check if an email contains a calendar invite and show details.
+
+    Use folder parameter if the email is not in INBOX.
+    """
+    logger.info("detect_invite: email_id=%r folder=%r", email_id, folder)
+    return _get_service(ctx).detect_invite_in_email(email_id, folder)
 
 
-def _send_rsvp(ctx: RunContext[Deps], email_id: str, status: str = "ACCEPTED") -> str:
-    """Accept or decline a meeting invite. Status: ACCEPTED, DECLINED, or TENTATIVE."""
-    logger.info("send_rsvp: email_id=%r status=%r", email_id, status)
-    return _get_service(ctx).send_rsvp_for_email(email_id, status)
+def _send_rsvp(
+    ctx: RunContext[Deps],
+    email_id: str,
+    status: str = "ACCEPTED",
+    folder: str = "INBOX",
+) -> str:
+    """Accept or decline a meeting invite. Status: ACCEPTED, DECLINED, or TENTATIVE.
+
+    Use folder parameter if the email is not in INBOX.
+    """
+    logger.info("send_rsvp: email_id=%r status=%r folder=%r", email_id, status, folder)
+    return _get_service(ctx).send_rsvp_for_email(email_id, status, folder)
 
 
 def _draft_reply(
-    ctx: RunContext[Deps], email_id: str, reply_body: str, greeting: str = ""
+    ctx: RunContext[Deps],
+    email_id: str,
+    reply_body: str,
+    greeting: str = "",
+    folder: str = "INBOX",
 ) -> str:
-    """Save a reply draft to an email in the Drafts folder."""
-    logger.info("draft_reply: email_id=%r", email_id)
-    return _get_service(ctx).draft_reply(email_id, reply_body, greeting)
+    """Save a reply draft to an email in the Drafts folder.
+
+    Use folder parameter if the email is not in INBOX.
+    """
+    logger.info("draft_reply: email_id=%r folder=%r", email_id, folder)
+    return _get_service(ctx).draft_reply(email_id, reply_body, greeting, folder)
 
 
 def _send_reply(
-    ctx: RunContext[Deps], email_id: str, reply_body: str, greeting: str = ""
+    ctx: RunContext[Deps],
+    email_id: str,
+    reply_body: str,
+    greeting: str = "",
+    folder: str = "INBOX",
 ) -> str:
-    """Send a reply to an email directly via SMTP."""
-    logger.info("send_reply: email_id=%r", email_id)
-    return _get_service(ctx).send_reply(email_id, reply_body, greeting)
+    """Send a reply to an email directly via SMTP.
+
+    Use folder parameter if the email is not in INBOX.
+    """
+    logger.info("send_reply: email_id=%r folder=%r", email_id, folder)
+    return _get_service(ctx).send_reply(email_id, reply_body, greeting, folder)
 
 
 def _forward_email(
@@ -263,6 +332,7 @@ def register(registry: PluginRegistry) -> None:
         Tool(_list_messages, name="list_messages"),
         Tool(_show_email, name="show_email"),
         Tool(_get_attachment_url, name="get_attachment_url"),
+        Tool(_filter_emails, name="filter_emails"),
         Tool(_search_emails, name="search_emails"),
         Tool(_list_folders, name="list_folders"),
         Tool(_move_email, name="move_email"),

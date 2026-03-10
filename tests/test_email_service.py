@@ -910,3 +910,126 @@ class TestFolderValidation:
         assert data["ics_data"].startswith("BEGIN:VCALENDAR")
         assert "VEVENT" in data["ics_data"]
         assert data["subject"] == "Team Standup"
+
+    @patch("business_assistant_imap.email_service.extract_meeting_times")
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_get_meeting_info_custom_folder(
+        self,
+        mock_client_cls: MagicMock,
+        mock_extract: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """get_meeting_info uses the folder parameter instead of hardcoded INBOX."""
+        mock_extract.return_value = (None, None)
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1")),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        service.get_meeting_info("1", folder="Company/Meetings")
+
+        mock_client.get_all_messages.assert_called_once_with(folder="Company/Meetings")
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_get_meeting_links_custom_folder(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        """get_meeting_links uses the folder parameter instead of hardcoded INBOX."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1")),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        service.get_meeting_links("1", folder="Company/Meetings")
+
+        mock_client.get_all_messages.assert_called_once_with(folder="Company/Meetings")
+
+    @patch("business_assistant_imap.email_service.detect_invite")
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_detect_invite_custom_folder(
+        self,
+        mock_client_cls: MagicMock,
+        mock_detect: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """detect_invite_in_email uses the folder parameter instead of hardcoded INBOX."""
+        mock_detect.return_value = None
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1")),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        service.detect_invite_in_email("1", folder="Archive")
+
+        mock_client.get_all_messages.assert_called_once_with(folder="Archive")
+
+    @patch("business_assistant_imap.email_service.detect_invite")
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_send_rsvp_custom_folder(
+        self,
+        mock_client_cls: MagicMock,
+        mock_detect: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """send_rsvp_for_email uses the folder parameter instead of hardcoded INBOX."""
+        mock_detect.return_value = None
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1")),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        service.send_rsvp_for_email("1", folder="Archive")
+
+        mock_client.get_all_messages.assert_called_once_with(folder="Archive")
+
+    @patch("business_assistant_imap.email_service.save_draft_to_imap")
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_draft_reply_custom_folder(
+        self,
+        mock_client_cls: MagicMock,
+        mock_save_draft: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """draft_reply uses the folder parameter instead of hardcoded INBOX."""
+        mock_save_draft.return_value = True
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1")),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        service.draft_reply("1", "Thanks!", folder="Company/Projects")
+
+        mock_client.get_all_messages.assert_called_once_with(folder="Company/Projects")
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_send_reply_custom_folder(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        """send_reply uses the folder parameter instead of hardcoded INBOX."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1")),
+        ]
+        mock_client.send_email.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        service.send_reply("1", "Thanks!", folder="Company/Projects")
+
+        mock_client.get_all_messages.assert_called_once_with(folder="Company/Projects")
