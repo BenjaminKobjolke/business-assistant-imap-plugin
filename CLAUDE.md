@@ -29,6 +29,16 @@ The plugin exposes `register(registry: PluginRegistry)` which:
 2. Skips registration if IMAP_SERVER not configured
 3. Creates EmailService and registers 14 PydanticAI tools
 
+## Code Analysis
+
+After implementing new features or making significant changes, run the code analysis:
+
+```bash
+powershell -Command "cd 'D:\GIT\BenjaminKobjolke\business-assistant-imap-plugin'; cmd /c '.\tools\analyze_code.bat'"
+```
+
+Fix any reported issues before committing.
+
 ## Rules
 
 - Use objects for related values (DTOs/Settings)

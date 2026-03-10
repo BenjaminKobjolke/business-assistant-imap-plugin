@@ -207,3 +207,7 @@ marimo/_lsp/
 __marimo__/
 .pytest_cache
 .ruff_cache
+
+# Code analysis
+tools/analyze_code_config.bat
+code_analysis_results/
