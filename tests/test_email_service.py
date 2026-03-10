@@ -911,6 +911,51 @@ class TestFolderValidation:
         assert "VEVENT" in data["ics_data"]
         assert data["subject"] == "Team Standup"
 
+    @patch("business_assistant_imap.email_service.detect_invite")
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_detect_invite_sanitizes_null_bytes(
+        self,
+        mock_client_cls: MagicMock,
+        mock_detect: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """ICS data with embedded null bytes should be sanitized in JSON output."""
+        from datetime import datetime
+
+        from business_assistant_imap.invite_handler import ParsedInvite
+        from tests.conftest import SAMPLE_ICS
+
+        ics_with_nulls = b"\x00" + SAMPLE_ICS.encode("utf-8").replace(b"VEVENT", b"V\x00EVENT")
+        invite = ParsedInvite(
+            message_id="1",
+            subject="Team Standup",
+            ics_data=ics_with_nulls,
+            uid="test-uid-123@example.com",
+            summary="Team Standup",
+            dtstart=datetime(2026, 3, 15, 10, 0),
+            dtend=datetime(2026, 3, 15, 11, 0),
+            organizer="Alice Smith",
+            organizer_email="alice@example.com",
+            location="Conference Room A",
+            method="REQUEST",
+        )
+        mock_detect.return_value = invite
+
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1")),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.detect_invite_in_email("1")
+
+        data = json.loads(result)
+        assert "ics_data" in data
+        assert "\x00" not in data["ics_data"]
+        assert "VEVENT" in data["ics_data"]
+
     @patch("business_assistant_imap.email_service.extract_meeting_times")
     @patch("business_assistant_imap.email_service.ImapClient")
     def test_get_meeting_info_custom_folder(

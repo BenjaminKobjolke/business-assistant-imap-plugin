@@ -573,7 +573,8 @@ class EmailService:
                     if invite.is_cancellation:
                         info["cancelled"] = True
                     if invite.ics_data:
-                        info["ics_data"] = invite.ics_data.decode("utf-8", errors="replace")
+                        sanitized = invite.ics_data.replace(b"\x00", b"")
+                        info["ics_data"] = sanitized.decode("utf-8", errors="replace")
                     return json.dumps(info)
             return "Email not found."
         finally:
