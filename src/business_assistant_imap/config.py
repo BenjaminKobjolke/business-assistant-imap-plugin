@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .constants import (
+    DEFAULT_DB_PATH,
     DEFAULT_EMAIL_FOOTER_PATH,
     DEFAULT_IMAP_PORT,
     DEFAULT_SMTP_PORT,
+    ENV_ASSISTANT_DB_PATH,
     ENV_EMAIL_FOOTER_PATH,
     ENV_EMAIL_FROM_ADDRESS,
     ENV_IMAP_PASSWORD,
@@ -43,6 +45,13 @@ class SmtpSettings:
     port: int = DEFAULT_SMTP_PORT
     username: str = ""
     password: str = ""
+
+
+@dataclass(frozen=True)
+class DatabaseSettings:
+    """SQLite database settings."""
+
+    db_path: str = DEFAULT_DB_PATH
 
 
 @dataclass(frozen=True)
@@ -94,3 +103,9 @@ def load_email_settings() -> EmailSettings | None:
         footer_html = footer_path.read_text(encoding="utf-8")
 
     return EmailSettings(imap=imap, smtp=smtp, from_address=from_address, footer_html=footer_html)
+
+
+def load_database_settings() -> DatabaseSettings:
+    """Load database settings from environment variables."""
+    db_path = os.environ.get(ENV_ASSISTANT_DB_PATH, DEFAULT_DB_PATH)
+    return DatabaseSettings(db_path=db_path)

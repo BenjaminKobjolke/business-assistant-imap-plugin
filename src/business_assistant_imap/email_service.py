@@ -26,6 +26,7 @@ from .constants import (
     MIME_TEXT_PLAIN,
 )
 from .email_service_compose import ComposeMixin, _extract_reply_address
+from .email_service_done import DoneMixin
 from .email_service_meeting import MeetingMixin
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ logger = logging.getLogger(__name__)
 __all__ = ["EmailService", "_extract_reply_address"]
 
 
-class EmailService(MeetingMixin, ComposeMixin):
+class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
     """High-level email operations wrapping ImapClient.
 
     Each operation connects and disconnects per call (try/finally pattern).

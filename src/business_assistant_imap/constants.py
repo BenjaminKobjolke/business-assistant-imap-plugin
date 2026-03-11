@@ -31,8 +31,13 @@ PREFIX_FORWARD = "Fwd: "
 PLUGIN_NAME = "imap"
 PLUGIN_DESCRIPTION = "IMAP/SMTP email operations"
 
-# Plugin data key
+# Plugin data keys
 PLUGIN_DATA_EMAIL_SERVICE = "email_service"
+PLUGIN_DATA_DATABASE = "database"
+
+# Database
+ENV_ASSISTANT_DB_PATH = "ASSISTANT_DB_PATH"
+DEFAULT_DB_PATH = "data/assistant.db"
 
 # RSVP statuses
 RSVP_ACCEPTED = "ACCEPTED"
@@ -91,6 +96,11 @@ Do NOT put the folder name in the query string.
 - filter_emails: Filter emails by subject/from regex patterns. Always dry_run=True first, \
 then confirm with user before applying actions (trash or move).
 - build_greeting: Build a time-aware greeting (Guten Morgen/Hallo + salutation)
+- mark_email_as_done: Mark an email as "done" by moving it to a person- or company-specific \
+folder. On first use for a sender, provide target_folder and mapping_type ('person' or \
+'company'). After that, the tool remembers the folder automatically. \
+A 'person' mapping applies only to the exact sender email address. \
+A 'company' mapping applies to all emails from that sender's domain.
 
 When searching for emails by person name, always check memory first for aliases \
 (e.g., if the user stored "markus = meiners@xida.de", search for the email address).

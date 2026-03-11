@@ -9,6 +9,7 @@ dependencies = [
     "icalendar",
     "imap-client-lib",
     "business-assistant-v2",
+    "sqlalchemy",
 ]
 
 [build-system]

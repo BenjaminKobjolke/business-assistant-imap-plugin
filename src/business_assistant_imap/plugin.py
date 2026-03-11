@@ -9,13 +9,15 @@ from business_assistant.agent.deps import Deps
 from business_assistant.plugins.registry import PluginInfo, PluginRegistry
 from pydantic_ai import RunContext, Tool
 
-from .config import load_email_settings
+from .config import load_database_settings, load_email_settings
 from .constants import (
+    PLUGIN_DATA_DATABASE,
     PLUGIN_DATA_EMAIL_SERVICE,
     PLUGIN_DESCRIPTION,
     PLUGIN_NAME,
     SYSTEM_PROMPT_EMAIL,
 )
+from .database import Database
 from .email_service import EmailService
 from .greeting_builder import build_greeting
 
@@ -310,6 +312,37 @@ def _build_greeting(ctx: RunContext[Deps], salutation: str = "", skip: bool = Fa
     return build_greeting(salutation, skip)
 
 
+def _get_database(ctx: RunContext[Deps]) -> Database:
+    """Retrieve the Database from plugin_data."""
+    return ctx.deps.plugin_data[PLUGIN_DATA_DATABASE]
+
+
+def _mark_email_as_done(
+    ctx: RunContext[Deps],
+    email_id: str,
+    target_folder: str = "",
+    mapping_type: str = "",
+    folder: str = "INBOX",
+) -> str:
+    """Mark an email as done by moving it to a learned folder.
+
+    On first use for a sender, provide target_folder and mapping_type
+    ('person' for exact email, 'company' for all @domain).
+    After that, just provide email_id — the folder is remembered.
+    """
+    logger.info(
+        "mark_email_as_done: email_id=%r target_folder=%r mapping_type=%r folder=%r",
+        email_id, target_folder, mapping_type, folder,
+    )
+    return _get_service(ctx).mark_as_done(
+        email_id=email_id,
+        database=_get_database(ctx),
+        target_folder=target_folder,
+        mapping_type=mapping_type,
+        folder=folder,
+    )
+
+
 def register(registry: PluginRegistry) -> None:
     """Register the IMAP plugin with the plugin registry.
 
@@ -326,6 +359,9 @@ def register(registry: PluginRegistry) -> None:
         return
 
     service = EmailService(email_settings)
+
+    db_settings = load_database_settings()
+    database = Database(db_settings.db_path)
 
     tools = [
         Tool(_list_inbox, name="list_inbox"),
@@ -349,6 +385,7 @@ def register(registry: PluginRegistry) -> None:
         Tool(_draft_forward, name="draft_forward"),
         Tool(_search_sent_to, name="search_sent_to"),
         Tool(_build_greeting, name="build_greeting"),
+        Tool(_mark_email_as_done, name="mark_email_as_done"),
     ]
 
     info = PluginInfo(
@@ -359,5 +396,6 @@ def register(registry: PluginRegistry) -> None:
 
     registry.register(info, tools)
     registry.plugin_data[PLUGIN_DATA_EMAIL_SERVICE] = service
+    registry.plugin_data[PLUGIN_DATA_DATABASE] = database
 
     logger.info("IMAP plugin registered with %d tools", len(tools))
