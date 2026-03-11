@@ -51,20 +51,29 @@ def _get_service(ctx: RunContext[Deps]) -> EmailService:
     return ctx.deps.plugin_data[PLUGIN_DATA_EMAIL_SERVICE]
 
 
-def _list_inbox(ctx: RunContext[Deps], limit: int = 20) -> str:
-    """List recent emails from the inbox. Default limit: 20."""
-    logger.info("list_inbox: limit=%d", limit)
-    return _get_service(ctx).list_inbox(limit=limit)
+def _list_inbox(
+    ctx: RunContext[Deps], limit: int = 20, unread_only: bool = False
+) -> str:
+    """List recent emails from the inbox. Default limit: 20.
+
+    Set unread_only=True to show only unread emails.
+    """
+    logger.info("list_inbox: limit=%d unread_only=%r", limit, unread_only)
+    return _get_service(ctx).list_inbox(limit=limit, unread_only=unread_only)
 
 
-def _list_messages(ctx: RunContext[Deps], folder: str = "INBOX", limit: int = 20) -> str:
+def _list_messages(
+    ctx: RunContext[Deps], folder: str = "INBOX", limit: int = 20,
+    unread_only: bool = False,
+) -> str:
     """List recent emails from a specific mailbox folder.
 
     Use list_folders to discover available folder names.
     Examples: folder="Sent", folder="Company/Clients/ProjectName"
+    Set unread_only=True to show only unread emails.
     """
-    logger.info("list_messages: folder=%r limit=%d", folder, limit)
-    return _get_service(ctx).list_messages(folder=folder, limit=limit)
+    logger.info("list_messages: folder=%r limit=%d unread_only=%r", folder, limit, unread_only)
+    return _get_service(ctx).list_messages(folder=folder, limit=limit, unread_only=unread_only)
 
 
 def _show_email(ctx: RunContext[Deps], email_id: str, folder: str = "INBOX") -> str:
@@ -166,6 +175,17 @@ def _trash_email(ctx: RunContext[Deps], email_id: str) -> str:
     """Move an email to the Trash folder."""
     logger.info("trash_email: email_id=%r", email_id)
     return _get_service(ctx).trash_email(email_id)
+
+
+def _mark_as_read(
+    ctx: RunContext[Deps], email_id: str, folder: str = "INBOX"
+) -> str:
+    """Mark an email as read (set \\Seen flag).
+
+    Use folder parameter if the email is not in INBOX.
+    """
+    logger.info("mark_as_read: email_id=%r folder=%r", email_id, folder)
+    return _get_service(ctx).mark_as_read(email_id, folder)
 
 
 def _get_unread_count(ctx: RunContext[Deps]) -> str:
@@ -373,6 +393,7 @@ def register(registry: PluginRegistry) -> None:
         Tool(_list_folders, name="list_folders"),
         Tool(_move_email, name="move_email"),
         Tool(_trash_email, name="trash_email"),
+        Tool(_mark_as_read, name="mark_as_read"),
         Tool(_get_unread_count, name="get_unread_count"),
         Tool(_get_meeting_info, name="get_meeting_info"),
         Tool(_get_appointments, name="get_appointments"),

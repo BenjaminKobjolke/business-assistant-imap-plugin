@@ -113,30 +113,15 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
             )
         return folder, FOLDER_NOT_FOUND_NO_SUGGESTIONS.format(folder=folder)
 
-    def list_inbox(self, limit: int = 20) -> str:
+    def list_inbox(
+        self, limit: int = 20, unread_only: bool = False
+    ) -> str:
         """List recent emails from the inbox."""
-        client = self._create_client()
-        try:
-            messages = client.get_all_messages(
-                folder="INBOX", limit=limit
-            )
-            if not messages:
-                return "No emails found in inbox."
-
-            emails = []
-            for msg_id, email_msg in messages:
-                emails.append({
-                    "_id": str(msg_id),
-                    "from": email_msg.from_address or "(unknown)",
-                    "subject": email_msg.subject or "(no subject)",
-                    "date": email_msg.date or "",
-                })
-            return json.dumps({"emails": emails})
-        finally:
-            client.disconnect()
+        return self.list_messages("INBOX", limit=limit, unread_only=unread_only)
 
     def list_messages(
-        self, folder: str = "INBOX", limit: int = 20
+        self, folder: str = "INBOX", limit: int = 20,
+        unread_only: bool = False,
     ) -> str:
         """List recent emails from a specific folder."""
         client = self._create_client()
@@ -145,9 +130,17 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
             if error:
                 return error
 
-            messages = client.get_all_messages(
-                folder=folder, limit=limit
-            )
+            if unread_only:
+                messages = client.get_messages(
+                    search_criteria=["UNSEEN"],
+                    folder=folder,
+                    limit=limit,
+                    include_attachments=False,
+                )
+            else:
+                messages = client.get_all_messages(
+                    folder=folder, limit=limit
+                )
             if not messages:
                 return f"No emails found in {folder}."
 
@@ -477,6 +470,21 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
     def trash_email(self, email_id: str) -> str:
         """Move an email to the Trash folder."""
         return self.move_email(email_id, "Trash")
+
+    def mark_as_read(self, email_id: str, folder: str = "INBOX") -> str:
+        """Mark an email as read (set \\Seen flag)."""
+        client = self._create_client()
+        try:
+            folder, error = self._resolve_folder(client, folder)
+            if error:
+                return error
+            client.client.select_folder(folder)
+            success = client.mark_as_read(email_id)
+            if success:
+                return "Email marked as read."
+            return "Failed to mark email as read."
+        finally:
+            client.disconnect()
 
     def get_unread_count(self) -> str:
         """Get the number of unread emails in the inbox."""

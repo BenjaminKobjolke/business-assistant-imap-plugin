@@ -67,9 +67,10 @@ FILTER_INVALID_REGEX = "Invalid regex pattern: {error}"
 
 # System prompt extra
 SYSTEM_PROMPT_EMAIL = """You have access to email tools for managing the user's IMAP mailbox:
-- list_inbox: List recent emails from the inbox
+- list_inbox: List recent emails from the inbox. Use unread_only=True to show only unread emails.
 - list_messages: List recent emails from any folder (use folder parameter, e.g., \
-folder="Company/Clients/ProjectName"). Use list_folders to discover folder names.
+folder="Company/Clients/ProjectName"). Use list_folders to discover folder names. \
+Use unread_only=True to show only unread emails.
 - show_email: Show full details of a specific email by ID (use folder='Sent' for sent emails)
 - get_attachment_url: Upload an email attachment to get a shareable URL. \
 Use when user asks to see/download an attachment or image from an email.
@@ -80,6 +81,7 @@ Do NOT put the folder name in the query string.
 - list_folders: List all mailbox folders
 - move_email: Move an email to a different folder
 - trash_email: Move an email to the Trash folder
+- mark_as_read: Mark an email as read (use folder param if not in INBOX)
 - get_unread_count: Get the number of unread emails
 - get_meeting_info: Get meeting/calendar details from an email (use folder param if not in INBOX)
 - get_appointments: List upcoming appointments from a meetings folder
@@ -101,6 +103,10 @@ folder. On first use for a sender, provide target_folder and mapping_type ('pers
 'company'). After that, the tool remembers the folder automatically. \
 A 'person' mapping applies only to the exact sender email address. \
 A 'company' mapping applies to all emails from that sender's domain.
+
+When the user asks for unread emails, use list_inbox(unread_only=True) or \
+list_messages(folder=..., unread_only=True). Do NOT rely on get_unread_count alone — \
+it only returns a count, not the actual emails.
 
 When searching for emails by person name, always check memory first for aliases \
 (e.g., if the user stored "markus = meiners@xida.de", search for the email address).

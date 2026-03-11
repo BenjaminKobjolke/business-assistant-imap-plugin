@@ -19,6 +19,7 @@ class TestEmailService:
     ) -> None:
         mock_client = MagicMock()
         mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
         mock_client.get_all_messages.return_value = [
             ("1", FakeEmailMessage(message_id="1", subject="Test Email")),
         ]
@@ -96,6 +97,7 @@ class TestEmailService:
     ) -> None:
         mock_client = MagicMock()
         mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
         mock_client.get_all_messages.return_value = []
         mock_client_cls.return_value = mock_client
 
@@ -330,6 +332,108 @@ class TestEmailService:
         assert data["attachments"][0]["filename"] == "logo.png"
         assert data["attachments"][0]["is_inline"] is True
         assert data["attachments"][1]["filename"] == "report.pdf"
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_list_inbox_unread_only(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client.get_messages.return_value = [
+            ("5", FakeEmailMessage(message_id="5", subject="Unread Email")),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.list_inbox(unread_only=True)
+
+        data = json.loads(result)
+        assert len(data["emails"]) == 1
+        assert data["emails"][0]["subject"] == "Unread Email"
+        mock_client.get_messages.assert_called_once_with(
+            search_criteria=["UNSEEN"],
+            folder="INBOX",
+            limit=20,
+            include_attachments=False,
+        )
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_list_messages_unread_only(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX", "Sent"]
+        mock_client.get_messages.return_value = [
+            ("10", FakeEmailMessage(message_id="10", subject="Unread Sent")),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.list_messages(folder="Sent", unread_only=True)
+
+        data = json.loads(result)
+        assert len(data["emails"]) == 1
+        mock_client.get_messages.assert_called_once_with(
+            search_criteria=["UNSEEN"],
+            folder="Sent",
+            limit=20,
+            include_attachments=False,
+        )
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_list_inbox_delegates_to_list_messages(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1", subject="Test")),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.list_inbox(limit=5)
+
+        data = json.loads(result)
+        assert len(data["emails"]) == 1
+        mock_client.get_all_messages.assert_called_once_with(
+            folder="INBOX", limit=5
+        )
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_mark_as_read_success(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client.mark_as_read.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.mark_as_read("42")
+
+        assert result == "Email marked as read."
+        mock_client.mark_as_read.assert_called_once_with("42")
+        mock_client.disconnect.assert_called_once()
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_mark_as_read_failure(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client.mark_as_read.return_value = False
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.mark_as_read("42")
+
+        assert result == "Failed to mark email as read."
 
     @patch("business_assistant_imap.email_service.ImapClient")
     def test_connection_failure(
