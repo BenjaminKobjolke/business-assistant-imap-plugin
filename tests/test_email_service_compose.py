@@ -112,7 +112,8 @@ class TestForwardEmail:
             ],
         )
         mock_client.get_messages.return_value = [("90", fake_msg)]
-        mock_client.forward_email.return_value = True
+        mock_client.send_email.return_value = True
+        mock_client.save_draft.return_value = True
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
@@ -121,7 +122,12 @@ class TestForwardEmail:
         )
 
         assert "forwarded to helena@example.com" in result
-        mock_client.forward_email.assert_called_once()
+        mock_client.send_email.assert_called_once()
+        # Verify sent copy saved to Sent folder
+        mock_client.save_draft.assert_called_once()
+        sent_kwargs = mock_client.save_draft.call_args[1]
+        assert sent_kwargs["draft_folder"] == "Sent"
+        assert sent_kwargs["mark_as_unread"] is False
 
     @patch("business_assistant_imap.email_service.ImapClient")
     def test_forward_email_not_found(
@@ -149,13 +155,38 @@ class TestForwardEmail:
         mock_client.connect.return_value = True
         fake_msg = FakeEmailMessage(message_id="91", subject="Test")
         mock_client.get_messages.return_value = [("91", fake_msg)]
-        mock_client.forward_email.return_value = False
+        mock_client.send_email.return_value = False
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
         result = service.forward_email("91", ["bob@example.com"])
 
         assert result == "Failed to forward email."
+        mock_client.save_draft.assert_not_called()
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_forward_email_sent_copy_failure_still_succeeds(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """Forward succeeds even if saving to Sent folder fails."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        fake_msg = FakeEmailMessage(
+            message_id="92", subject="Test Forward"
+        )
+        mock_client.get_messages.return_value = [("92", fake_msg)]
+        mock_client.send_email.return_value = True
+        mock_client.save_draft.side_effect = Exception("IMAP error")
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.forward_email(
+            "92", ["bob@example.com"], "FYI"
+        )
+
+        assert "forwarded to bob@example.com" in result
 
 
 class TestDraftForward:
@@ -276,6 +307,7 @@ class TestDraftReplyFolder:
             ("1", FakeEmailMessage(message_id="1")),
         ]
         mock_client.send_email.return_value = True
+        mock_client.save_draft.return_value = True
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
@@ -284,3 +316,70 @@ class TestDraftReplyFolder:
         mock_client.get_all_messages.assert_called_once_with(
             folder="Company/Projects"
         )
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_send_reply_saves_to_sent_folder(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """send_reply saves a copy to the Sent folder after sending."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1")),
+        ]
+        mock_client.send_email.return_value = True
+        mock_client.save_draft.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.send_reply("1", "Thanks!")
+
+        assert result == "Reply sent."
+        mock_client.save_draft.assert_called_once()
+        sent_kwargs = mock_client.save_draft.call_args[1]
+        assert sent_kwargs["draft_folder"] == "Sent"
+        assert sent_kwargs["mark_as_unread"] is False
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_send_reply_sent_copy_failure_still_succeeds(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """send_reply succeeds even if saving to Sent folder fails."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1")),
+        ]
+        mock_client.send_email.return_value = True
+        mock_client.save_draft.side_effect = Exception("IMAP error")
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.send_reply("1", "Thanks!")
+
+        assert result == "Reply sent."
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_send_reply_failure_no_sent_copy(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """send_reply does not save to Sent when send fails."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1")),
+        ]
+        mock_client.send_email.return_value = False
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.send_reply("1", "Thanks!")
+
+        assert result == "Failed to send reply."
+        mock_client.save_draft.assert_not_called()

@@ -11,6 +11,7 @@ from pydantic_ai import RunContext, Tool
 
 from .config import load_database_settings, load_email_settings
 from .constants import (
+    PLUGIN_CATEGORY,
     PLUGIN_DATA_DATABASE,
     PLUGIN_DATA_EMAIL_SERVICE,
     PLUGIN_DESCRIPTION,
@@ -413,6 +414,7 @@ def register(registry: PluginRegistry) -> None:
         name=PLUGIN_NAME,
         description=PLUGIN_DESCRIPTION,
         system_prompt_extra=SYSTEM_PROMPT_EMAIL,
+        category=PLUGIN_CATEGORY,
     )
 
     registry.register(info, tools)

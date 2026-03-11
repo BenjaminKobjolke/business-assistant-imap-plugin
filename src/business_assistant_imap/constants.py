@@ -27,8 +27,9 @@ MIME_TEXT_HTML = "text/html"
 PREFIX_REPLY = "Re: "
 PREFIX_FORWARD = "Fwd: "
 
-# Plugin name
+# Plugin name and category
 PLUGIN_NAME = "imap"
+PLUGIN_CATEGORY = "email"
 PLUGIN_DESCRIPTION = "IMAP/SMTP email operations"
 
 # Plugin data keys
