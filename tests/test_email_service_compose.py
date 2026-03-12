@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-from business_assistant_imap.config import EmailSettings
+from business_assistant_imap.config import EmailSettings, ImapSettings, SmtpSettings
 from business_assistant_imap.email_service import EmailService
 from business_assistant_imap.email_service_compose import (
     _extract_reply_address,
@@ -63,7 +63,8 @@ class TestSearchSentTo:
         email = data["sent_emails"][0]
         assert email["_id"] == "42"
         assert email["subject"] == "Hintergrundbilder"
-        assert "Hallo Frau Schmidt" in email["body_snippet"]
+        assert "Hallo Frau Schmidt" in email["body_start"]
+        assert email["body_end"] == ""
         mock_client.get_messages.assert_called_once_with(
             search_criteria=["TO", "alice@example.com"],
             folder="Sent",
@@ -86,6 +87,294 @@ class TestSearchSentTo:
         result = service.search_sent_to("alice@example.com")
 
         assert "No sent emails to alice@example.com" in result
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_search_sent_to_captures_sign_off(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """Body > 1000 chars produces body_end with sign-off."""
+        long_body = "Hallo Frau Schmidt, " + ("lorem ipsum " * 100) + "Beste Grüße, Max"
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_messages.return_value = [
+            (
+                "43",
+                FakeEmailMessage(
+                    to_address="alice@example.com",
+                    subject="Long email",
+                    body_plain=long_body,
+                ),
+            ),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.search_sent_to("alice@example.com")
+
+        data = json.loads(result)
+        email = data["sent_emails"][0]
+        assert "Hallo Frau Schmidt" in email["body_start"]
+        assert "Beste Grüße" in email["body_end"]
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_search_sent_to_medium_body_no_tail(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """Body ~800 chars (< 1000) produces empty body_end."""
+        medium_body = "Hallo " + ("x" * 800) + " Ende"
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_messages.return_value = [
+            (
+                "44",
+                FakeEmailMessage(
+                    to_address="alice@example.com",
+                    subject="Medium email",
+                    body_plain=medium_body,
+                ),
+            ),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.search_sent_to("alice@example.com")
+
+        data = json.loads(result)
+        email = data["sent_emails"][0]
+        assert email["body_start"] != ""
+        assert email["body_end"] == ""
+
+
+class TestComposeEmailWithFooter:
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_compose_email_with_footer(
+        self,
+        mock_client_cls: MagicMock,
+    ) -> None:
+        """compose_email auto-appends footer when include_footer=True."""
+        settings = EmailSettings(
+            imap=ImapSettings(server="imap.example.com", username="u", password="p"),
+            smtp=SmtpSettings(server="smtp.example.com"),
+            from_address="u@example.com",
+            footer_html="<p>My Footer</p>",
+        )
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.send_email.return_value = True
+        mock_client.save_draft.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(settings)
+        service.compose_email(
+            to_addresses=["alice@example.com"],
+            subject="Hello",
+            body="<p>Hi</p>",
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        assert "<p>My Footer</p>" in call_kwargs["body"]
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_compose_email_without_footer(
+        self,
+        mock_client_cls: MagicMock,
+    ) -> None:
+        """compose_email skips footer when include_footer=False."""
+        settings = EmailSettings(
+            imap=ImapSettings(server="imap.example.com", username="u", password="p"),
+            smtp=SmtpSettings(server="smtp.example.com"),
+            from_address="u@example.com",
+            footer_html="<p>My Footer</p>",
+        )
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.send_email.return_value = True
+        mock_client.save_draft.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(settings)
+        service.compose_email(
+            to_addresses=["alice@example.com"],
+            subject="Hello",
+            body="<p>Hi</p>",
+            include_footer=False,
+        )
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        assert "<p>My Footer</p>" not in call_kwargs["body"]
+
+
+class TestDraftReplyWithoutFooter:
+    @patch(
+        "business_assistant_imap.email_service_compose.save_draft_to_imap"
+    )
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_draft_reply_without_footer(
+        self,
+        mock_client_cls: MagicMock,
+        mock_save_draft: MagicMock,
+    ) -> None:
+        """draft_reply omits footer when include_footer=False."""
+        settings = EmailSettings(
+            imap=ImapSettings(server="imap.example.com", username="u", password="p"),
+            smtp=SmtpSettings(server="smtp.example.com"),
+            from_address="u@example.com",
+            footer_html="<p>My Footer</p>",
+        )
+        mock_save_draft.return_value = True
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1")),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(settings)
+        service.draft_reply("1", "Thanks!", include_footer=False)
+
+        call_kwargs = mock_save_draft.call_args[1]
+        assert "<p>My Footer</p>" not in call_kwargs["html_body"]
+
+
+class TestComposeEmail:
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_compose_email_success(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.send_email.return_value = True
+        mock_client.save_draft.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.compose_email(
+            to_addresses=["alice@example.com"],
+            subject="Hello",
+            body="<p>Hi there</p>",
+        )
+
+        assert "sent to alice@example.com" in result
+        mock_client.send_email.assert_called_once()
+        call_kwargs = mock_client.send_email.call_args[1]
+        assert call_kwargs["to_addresses"] == ["alice@example.com"]
+        assert call_kwargs["subject"] == "Hello"
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_compose_email_with_bcc(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.send_email.return_value = True
+        mock_client.save_draft.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.compose_email(
+            to_addresses=["alice@example.com"],
+            subject="Hello",
+            body="<p>Hi</p>",
+            bcc_addresses=["bcc@example.com"],
+        )
+
+        assert "sent to alice@example.com" in result
+        call_kwargs = mock_client.send_email.call_args[1]
+        assert call_kwargs["bcc_addresses"] == ["bcc@example.com"]
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_compose_email_failure(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.send_email.return_value = False
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.compose_email(
+            to_addresses=["alice@example.com"],
+            subject="Hello",
+            body="<p>Hi</p>",
+        )
+
+        assert result == "Failed to send email."
+
+
+class TestDraftCompose:
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_draft_compose_success(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.save_draft.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.draft_compose(
+            to_addresses=["alice@example.com"],
+            subject="Hello",
+            body="<p>Hi</p>",
+        )
+
+        assert result == "Compose draft saved."
+        mock_client.save_draft.assert_called_once()
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_draft_compose_with_bcc(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.save_draft.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.draft_compose(
+            to_addresses=["alice@example.com"],
+            subject="Hello",
+            body="<p>Hi</p>",
+            bcc_addresses=["bcc@example.com"],
+        )
+
+        assert result == "Compose draft saved."
+        call_kwargs = mock_client.save_draft.call_args[1]
+        assert call_kwargs["bcc_addresses"] == ["bcc@example.com"]
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_draft_compose_failure(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.save_draft.return_value = False
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.draft_compose(
+            to_addresses=["alice@example.com"],
+            subject="Hello",
+            body="<p>Hi</p>",
+        )
+
+        assert result == "Failed to save compose draft."
 
 
 class TestForwardEmail:

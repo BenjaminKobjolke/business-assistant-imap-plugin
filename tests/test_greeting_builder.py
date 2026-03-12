@@ -39,3 +39,15 @@ class TestBuildGreeting:
 
     def test_skip_without_salutation(self) -> None:
         assert build_greeting(skip=True) == ""
+
+    def test_formal_greeting_herr(self) -> None:
+        assert build_greeting("Herr Mueller", formal=True) == "Sehr geehrter Herr Mueller"
+
+    def test_formal_greeting_frau(self) -> None:
+        assert build_greeting("Frau Schmidt", formal=True) == "Sehr geehrte Frau Schmidt"
+
+    def test_formal_greeting_no_salutation(self) -> None:
+        assert build_greeting(formal=True) == "Sehr geehrte Damen und Herren"
+
+    def test_formal_greeting_skip(self) -> None:
+        assert build_greeting("Herr X", formal=True, skip=True) == ""

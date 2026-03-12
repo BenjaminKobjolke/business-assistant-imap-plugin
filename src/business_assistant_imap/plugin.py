@@ -254,13 +254,18 @@ def _draft_reply(
     reply_body: str,
     greeting: str = "",
     folder: str = "INBOX",
+    include_footer: bool = True,
 ) -> str:
     """Save a reply draft to an email in the Drafts folder.
 
     Use folder parameter if the email is not in INBOX.
+    Set include_footer=False to omit the HTML footer/signature.
     """
     logger.info("draft_reply: email_id=%r folder=%r", email_id, folder)
-    return _get_service(ctx).draft_reply(email_id, reply_body, greeting, folder)
+    return _get_service(ctx).draft_reply(
+        email_id, reply_body, greeting, folder,
+        include_footer=include_footer,
+    )
 
 
 def _send_reply(
@@ -269,13 +274,18 @@ def _send_reply(
     reply_body: str,
     greeting: str = "",
     folder: str = "INBOX",
+    include_footer: bool = True,
 ) -> str:
     """Send a reply to an email directly via SMTP.
 
     Use folder parameter if the email is not in INBOX.
+    Set include_footer=False to omit the HTML footer/signature.
     """
     logger.info("send_reply: email_id=%r folder=%r", email_id, folder)
-    return _get_service(ctx).send_reply(email_id, reply_body, greeting, folder)
+    return _get_service(ctx).send_reply(
+        email_id, reply_body, greeting, folder,
+        include_footer=include_footer,
+    )
 
 
 def _forward_email(
@@ -284,16 +294,19 @@ def _forward_email(
     to_addresses: list[str],
     additional_message: str = "",
     folder: str = "INBOX",
+    include_footer: bool = True,
 ) -> str:
     """Forward an email to one or more recipients, preserving all attachments and inline images.
 
     Use folder parameter if the email is not in INBOX (e.g., folder="Sent").
+    Set include_footer=False to omit the HTML footer/signature.
     """
     logger.info(
         "forward_email: email_id=%r to=%r folder=%r", email_id, to_addresses, folder
     )
     return _get_service(ctx).forward_email(
-        email_id, to_addresses, additional_message, folder
+        email_id, to_addresses, additional_message, folder,
+        include_footer=include_footer,
     )
 
 
@@ -303,34 +316,92 @@ def _draft_forward(
     to_address: str,
     additional_message: str = "",
     folder: str = "INBOX",
+    include_footer: bool = True,
 ) -> str:
     """Save a forward draft preserving all attachments and inline images.
 
     Use folder parameter if the email is not in INBOX (e.g., folder="Sent").
+    Set include_footer=False to omit the HTML footer/signature.
     """
     logger.info(
         "draft_forward: email_id=%r to=%r folder=%r", email_id, to_address, folder
     )
     return _get_service(ctx).draft_forward(
-        email_id, to_address, additional_message, folder
+        email_id, to_address, additional_message, folder,
+        include_footer=include_footer,
+    )
+
+
+def _compose_email(
+    ctx: RunContext[Deps],
+    to_addresses: list[str],
+    subject: str,
+    body: str,
+    bcc_addresses: list[str] | None = None,
+    content_type: str = "text/html",
+    include_footer: bool = True,
+) -> str:
+    """Send a new composed email via SMTP with optional BCC.
+
+    Use for composing brand new emails (not replies or forwards).
+    Set include_footer=False to omit the HTML footer/signature.
+    """
+    logger.info("compose_email: to=%r subject=%r", to_addresses, subject)
+    return _get_service(ctx).compose_email(
+        to_addresses=to_addresses,
+        subject=subject,
+        body=body,
+        bcc_addresses=bcc_addresses,
+        content_type=content_type,
+        include_footer=include_footer,
+    )
+
+
+def _draft_compose(
+    ctx: RunContext[Deps],
+    to_addresses: list[str],
+    subject: str,
+    body: str,
+    bcc_addresses: list[str] | None = None,
+    content_type: str = "text/html",
+    include_footer: bool = True,
+) -> str:
+    """Save a new composed email as draft with optional BCC.
+
+    Use for composing brand new email drafts (not reply or forward drafts).
+    Set include_footer=False to omit the HTML footer/signature.
+    """
+    logger.info("draft_compose: to=%r subject=%r", to_addresses, subject)
+    return _get_service(ctx).draft_compose(
+        to_addresses=to_addresses,
+        subject=subject,
+        body=body,
+        bcc_addresses=bcc_addresses,
+        content_type=content_type,
+        include_footer=include_footer,
     )
 
 
 def _search_sent_to(ctx: RunContext[Deps], email_address: str, limit: int = 3) -> str:
     """Search the Sent folder for recent emails to a specific address.
 
-    Returns email body snippets so you can detect salutation patterns.
+    Returns the start and end of each email body so you can detect
+    writing style: salutation, tone, language, and sign-off patterns.
     """
     logger.info("search_sent_to: email_address=%r limit=%d", email_address, limit)
     return _get_service(ctx).search_sent_to(email_address, limit)
 
 
-def _build_greeting(ctx: RunContext[Deps], salutation: str = "", skip: bool = False) -> str:
+def _build_greeting(
+    ctx: RunContext[Deps], salutation: str = "", skip: bool = False,
+    formal: bool = False,
+) -> str:
     """Build a time-aware greeting. Returns 'Guten Morgen <salutation>' before 10 AM,
-    'Hallo <salutation>' otherwise. Returns empty string if skip is True.
+    'Hallo <salutation>' otherwise. Use formal=True for 'Sehr geehrter/Sehr geehrte'.
+    Returns empty string if skip is True.
     """
-    logger.info("build_greeting: salutation=%r skip=%r", salutation, skip)
-    return build_greeting(salutation, skip)
+    logger.info("build_greeting: salutation=%r skip=%r formal=%r", salutation, skip, formal)
+    return build_greeting(salutation, skip, formal=formal)
 
 
 def _get_database(ctx: RunContext[Deps]) -> Database:
@@ -405,6 +476,8 @@ def register(registry: PluginRegistry) -> None:
         Tool(_send_reply, name="send_reply"),
         Tool(_forward_email, name="forward_email"),
         Tool(_draft_forward, name="draft_forward"),
+        Tool(_compose_email, name="compose_email"),
+        Tool(_draft_compose, name="draft_compose"),
         Tool(_search_sent_to, name="search_sent_to"),
         Tool(_build_greeting, name="build_greeting"),
         Tool(_mark_email_as_done, name="mark_email_as_done"),

@@ -8,7 +8,7 @@ import json
 import logging
 import re
 
-from .constants import MIME_TEXT_HTML, MIME_TEXT_PLAIN
+from .constants import MIME_TEXT_HTML, MIME_TEXT_PLAIN, SNIPPET_MAX_CHARS
 from .draft_builder import (
     DraftEmailContent,
     assemble_forward_html,
@@ -43,6 +43,7 @@ class ComposeMixin:
 
     def _build_reply(
         self, email_msg: object, reply_body: str, greeting: str,
+        include_footer: bool = True,
     ) -> tuple[DraftEmailContent, str]:
         """Build reply content and HTML body from an email message."""
         original_body = email_msg.get_body(MIME_TEXT_PLAIN) or ""
@@ -55,13 +56,13 @@ class ComposeMixin:
             original_subject=email_msg.subject or "",
             original_body=original_body,
         )
-        html_body = assemble_reply_html(
-            content, footer_html=self._settings.footer_html
-        )
+        footer = self._settings.footer_html if include_footer else ""
+        html_body = assemble_reply_html(content, footer_html=footer)
         return content, html_body
 
     def _build_forward(
         self, email_msg: object, additional_message: str,
+        include_footer: bool = True,
     ) -> tuple[str, str, list]:
         """Build forward subject, HTML body, and attachments list."""
         original_body = email_msg.get_body(MIME_TEXT_PLAIN) or ""
@@ -70,6 +71,7 @@ class ComposeMixin:
         original_date = email_msg.date or ""
         original_subject = email_msg.subject or ""
 
+        footer = self._settings.footer_html if include_footer else ""
         html_body = assemble_forward_html(
             additional_message=additional_message,
             original_from=original_from,
@@ -77,7 +79,7 @@ class ComposeMixin:
             original_date=original_date,
             original_subject=original_subject,
             original_body=original_body,
-            footer_html=self._settings.footer_html,
+            footer_html=footer,
         )
         subject = make_forward_subject(original_subject)
         attachments = email_msg.attachments or []
@@ -116,6 +118,7 @@ class ComposeMixin:
         reply_body: str,
         greeting: str = "",
         folder: str = "INBOX",
+        include_footer: bool = True,
     ) -> str:
         """Save a reply draft to an email."""
         client = self._create_client()
@@ -124,7 +127,8 @@ class ComposeMixin:
             for msg_id, email_msg in (messages or []):
                 if str(msg_id) == str(email_id):
                     content, html_body = self._build_reply(
-                        email_msg, reply_body, greeting
+                        email_msg, reply_body, greeting,
+                        include_footer=include_footer,
                     )
                     success = save_draft_to_imap(
                         client=client,
@@ -146,6 +150,7 @@ class ComposeMixin:
         reply_body: str,
         greeting: str = "",
         folder: str = "INBOX",
+        include_footer: bool = True,
     ) -> str:
         """Send a reply to an email directly via SMTP."""
         client = self._create_client()
@@ -154,7 +159,8 @@ class ComposeMixin:
             for msg_id, email_msg in (messages or []):
                 if str(msg_id) == str(email_id):
                     content, html_body = self._build_reply(
-                        email_msg, reply_body, greeting
+                        email_msg, reply_body, greeting,
+                        include_footer=include_footer,
                     )
                     success = client.send_email(
                         to_addresses=[content.to_address],
@@ -183,6 +189,7 @@ class ComposeMixin:
         to_addresses: list[str],
         additional_message: str = "",
         folder: str = "INBOX",
+        include_footer: bool = True,
     ) -> str:
         """Forward an email preserving all attachments and inline images."""
         client = self._create_client()
@@ -195,7 +202,8 @@ class ComposeMixin:
             for msg_id, email_msg in messages:
                 if str(msg_id) == str(email_id):
                     subject, html_body, attachments = self._build_forward(
-                        email_msg, additional_message
+                        email_msg, additional_message,
+                        include_footer=include_footer,
                     )
                     success = client.send_email(
                         to_addresses=to_addresses,
@@ -227,6 +235,7 @@ class ComposeMixin:
         to_address: str,
         additional_message: str = "",
         folder: str = "INBOX",
+        include_footer: bool = True,
     ) -> str:
         """Save a forward draft preserving attachments and inline images."""
         client = self._create_client()
@@ -239,7 +248,8 @@ class ComposeMixin:
             for msg_id, email_msg in messages:
                 if str(msg_id) == str(email_id):
                     subject, html_body, attachments = self._build_forward(
-                        email_msg, additional_message
+                        email_msg, additional_message,
+                        include_footer=include_footer,
                     )
                     try:
                         success = client.save_draft(
@@ -262,12 +272,73 @@ class ComposeMixin:
         finally:
             client.disconnect()
 
+    def compose_email(
+        self,
+        to_addresses: list[str],
+        subject: str,
+        body: str,
+        bcc_addresses: list[str] | None = None,
+        content_type: str = "text/html",
+        include_footer: bool = True,
+    ) -> str:
+        """Send a new composed email via SMTP with optional BCC."""
+        if include_footer and content_type == MIME_TEXT_HTML and self._settings.footer_html:
+            body = body + f'<div style="margin-top: 20px;">{self._settings.footer_html}</div>'
+        client = self._create_client()
+        try:
+            success = client.send_email(
+                to_addresses=to_addresses,
+                subject=subject,
+                body=body,
+                content_type=content_type,
+                from_email=self._settings.from_address,
+                bcc_addresses=bcc_addresses,
+                **self._smtp_kwargs(),
+            )
+            if success:
+                self._save_to_sent(client, to_addresses, subject, body)
+                recipients = ", ".join(to_addresses)
+                return f"Email sent to {recipients}."
+            return "Failed to send email."
+        finally:
+            client.disconnect()
+
+    def draft_compose(
+        self,
+        to_addresses: list[str],
+        subject: str,
+        body: str,
+        bcc_addresses: list[str] | None = None,
+        content_type: str = "text/html",
+        include_footer: bool = True,
+    ) -> str:
+        """Save a new composed email as draft with optional BCC."""
+        if include_footer and content_type == MIME_TEXT_HTML and self._settings.footer_html:
+            body = body + f'<div style="margin-top: 20px;">{self._settings.footer_html}</div>'
+        client = self._create_client()
+        try:
+            kwargs: dict = {
+                "to_addresses": to_addresses,
+                "subject": subject,
+                "body": body,
+                "from_email": self._settings.from_address,
+                "content_type": content_type,
+            }
+            if bcc_addresses:
+                kwargs["bcc_addresses"] = bcc_addresses
+            success = client.save_draft(**kwargs)
+            if success:
+                return "Compose draft saved."
+            return "Failed to save compose draft."
+        finally:
+            client.disconnect()
+
     def search_sent_to(self, email_address: str, limit: int = 3) -> str:
         """Search the Sent folder for recent emails to a specific address.
 
         Uses IMAP server-side TO search for performance.
-        Returns the first ~500 chars of each email body so the agent can
-        detect salutation patterns.
+        Returns the start and end of each email body so the agent can
+        detect writing style: salutation, tone, language, and sign-off patterns.
         """
         client = self._create_client()
         try:
@@ -293,12 +364,19 @@ class ComposeMixin:
                         body = re.sub(r"<[^>]+>", "", raw_html)
                         body = html.unescape(body)
 
-                clean = " ".join(body.split())[:500] if body else ""
+                clean = " ".join(body.split()) if body else ""
+                body_start = clean[:SNIPPET_MAX_CHARS]
+                body_end = (
+                    clean[-SNIPPET_MAX_CHARS:]
+                    if len(clean) > SNIPPET_MAX_CHARS * 2
+                    else ""
+                )
                 items.append({
                     "_id": str(msg_id),
                     "subject": email_msg.subject or "(no subject)",
                     "date": email_msg.date or "",
-                    "body_snippet": clean,
+                    "body_start": body_start,
+                    "body_end": body_end,
                 })
 
             if not items:
