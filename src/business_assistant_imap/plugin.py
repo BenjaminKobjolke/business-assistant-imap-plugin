@@ -103,6 +103,29 @@ def _get_attachment_url(
     )
 
 
+def _save_attachment(
+    ctx: RunContext[Deps],
+    email_id: str,
+    filename: str,
+    destination_path: str,
+    folder: str = "INBOX",
+) -> str:
+    """Save an email attachment to a local file path.
+
+    Use this to save attachments to disk (e.g., into a project folder).
+    The destination_path must be within allowed filesystem paths.
+    """
+    logger.info(
+        "save_attachment: email_id=%r filename=%r dest=%r folder=%r",
+        email_id, filename, destination_path, folder,
+    )
+    filesystem_service = ctx.deps.plugin_data.get("filesystem_service")
+    return _get_service(ctx).save_attachment(
+        email_id, filename, destination_path, folder,
+        filesystem_service=filesystem_service,
+    )
+
+
 def _filter_emails(
     ctx: RunContext[Deps],
     subject_pattern: str = "",
@@ -499,6 +522,7 @@ def register(registry: PluginRegistry) -> None:
         Tool(_list_messages, name="list_messages"),
         Tool(_show_email, name="show_email"),
         Tool(_get_attachment_url, name="get_attachment_url"),
+        Tool(_save_attachment, name="save_attachment"),
         Tool(_filter_emails, name="filter_emails"),
         Tool(_search_emails, name="search_emails"),
         Tool(_list_folders, name="list_folders"),

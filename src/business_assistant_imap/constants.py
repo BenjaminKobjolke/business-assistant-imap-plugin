@@ -83,6 +83,9 @@ Use unread_only=True to show only unread emails.
 - show_email: Show full details of a specific email by ID (use folder='Sent' for sent emails)
 - get_attachment_url: Upload an email attachment to get a shareable URL. \
 Use when user asks to see/download an attachment or image from an email.
+- save_attachment: Save an email attachment to a local file path. \
+Use when user asks to save an attachment to disk or a project folder. \
+The destination_path must be within allowed filesystem paths.
 - search_emails: Search emails by query (from, subject, body) and/or IMAP tag. \
 Use the folder parameter to search in a specific folder \
 (e.g., search_emails(query="linux", folder="Clients/Project")). \
@@ -214,7 +217,11 @@ memory_set("style:<email>", "<brief style notes including formal/informal>")
 - Ask: "Want me to change anything? Say 'save draft' to save or 'send' to send."
 
 ### Step 4: Iterate
-- If the user requests changes, revise the draft and show it again
+- If the user requests ANY change (subject, body, greeting, tone, sign-off, recipients, etc.),
+  revise the draft and show the complete updated version again in chat
+- This includes subject changes — do NOT start a new compose/send flow for subject edits
+- NEVER call send_reply, draft_reply, compose_email, or draft_compose during iteration
+- Ask again: "Want me to change anything? Say 'save draft' to save or 'send' to send."
 - Repeat until the user is satisfied
 
 ### Step 5: Save or send — ONLY when the user explicitly says so
@@ -249,11 +256,22 @@ When the user asks to compose a new email (not a reply or forward), follow this 
 - Ask: "Want me to change anything? Say 'save draft' to save or 'send' to send."
 
 ### Step 4: Iterate
-- If the user requests changes, revise the draft and show it again
+- If the user requests ANY change (subject, body, greeting, tone, sign-off, recipients, etc.),
+  revise the draft and show the complete updated version again in chat
+- This includes subject changes — do NOT start a new compose/send flow for subject edits
+- NEVER call compose_email, draft_compose, send_reply, or draft_reply during iteration
+- Ask again: "Want me to change anything? Say 'save draft' to save or 'send' to send."
 - Repeat until the user is satisfied
 
 ### Step 5: Save or send — ONLY when the user explicitly says so
 - Check "pref:use_footer" — if false, pass include_footer=False
 - "save draft" / "save" / "speichern" → call draft_compose with the final text
 - "send" / "senden" / "abschicken" → call compose_email with the final text
-- NEVER call draft_compose or compose_email without explicit user confirmation"""
+- NEVER call draft_compose or compose_email without explicit user confirmation
+
+## Saving attachments to project folders
+When the user asks to save an email attachment to a project folder or local path:
+1. Use show_email to see attachment metadata (filenames)
+2. Build the destination path (e.g., using pm_store_file_in_project or a direct path)
+3. Call save_attachment with the email ID, exact filename, and destination path
+4. The attachment is saved as binary data via the filesystem service"""

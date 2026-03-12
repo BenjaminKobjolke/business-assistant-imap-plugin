@@ -138,6 +138,103 @@ class TestGetAttachmentUrl:
         assert result == "FTP upload failed for 'file.txt'."
 
 
+class TestSaveAttachment:
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_save_attachment_success(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_message_by_id.return_value = (
+            "90",
+            FakeEmailMessage(
+                message_id="90",
+                subject="With File",
+                attachments=[
+                    FakeAttachment(
+                        filename="report.pdf",
+                        content_type="application/pdf",
+                        data=b"pdfcontent",
+                    ),
+                ],
+            ),
+        )
+        mock_client_cls.return_value = mock_client
+
+        mock_fs = MagicMock()
+        mock_fs.write_binary.return_value = (
+            '{"path": "/dest/report.pdf", "size": 10, "status": "written"}'
+        )
+
+        service = EmailService(email_settings)
+        result = service.save_attachment(
+            "90", "report.pdf", "/dest/report.pdf",
+            filesystem_service=mock_fs,
+        )
+
+        data = json.loads(result)
+        assert data["status"] == "written"
+        mock_fs.write_binary.assert_called_once_with(
+            "/dest/report.pdf", b"pdfcontent",
+        )
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_save_attachment_email_not_found(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_message_by_id.return_value = None
+        mock_client_cls.return_value = mock_client
+
+        mock_fs = MagicMock()
+        service = EmailService(email_settings)
+        result = service.save_attachment(
+            "999", "file.txt", "/dest/file.txt",
+            filesystem_service=mock_fs,
+        )
+        assert result == "Email not found."
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_save_attachment_attachment_not_found(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_message_by_id.return_value = (
+            "91",
+            FakeEmailMessage(
+                message_id="91",
+                subject="Other",
+                attachments=[
+                    FakeAttachment(
+                        filename="other.pdf",
+                        content_type="application/pdf",
+                        data=b"data",
+                    ),
+                ],
+            ),
+        )
+        mock_client_cls.return_value = mock_client
+
+        mock_fs = MagicMock()
+        service = EmailService(email_settings)
+        result = service.save_attachment(
+            "91", "missing.txt", "/dest/missing.txt",
+            filesystem_service=mock_fs,
+        )
+        assert "not found in email" in result
+
+    def test_save_attachment_no_filesystem_service(
+        self, email_settings: EmailSettings
+    ) -> None:
+        service = EmailService(email_settings)
+        result = service.save_attachment(
+            "60", "image.png", "/dest/image.png",
+        )
+        assert result == "Filesystem service not configured."
+
+
 class TestFolderValidation:
     @patch("business_assistant_imap.email_service.ImapClient")
     def test_exact_match_proceeds(

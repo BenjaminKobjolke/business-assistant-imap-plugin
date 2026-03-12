@@ -249,6 +249,40 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
         finally:
             client.disconnect()
 
+    def save_attachment(
+        self,
+        email_id: str,
+        filename: str,
+        destination_path: str,
+        folder: str = "INBOX",
+        filesystem_service: object | None = None,
+    ) -> str:
+        """Save an email attachment to the local filesystem."""
+        if not filesystem_service:
+            return "Filesystem service not configured."
+
+        client = self._create_client()
+        try:
+            result = client.get_message_by_id(
+                email_id, folder=folder,
+                include_attachments=True,
+            )
+            if result is None:
+                return "Email not found."
+            msg_id, email_msg = result
+
+            for a in email_msg.attachments or []:
+                if a.filename == filename:
+                    save_result = filesystem_service.write_binary(  # type: ignore[attr-defined]
+                        destination_path, a.data,
+                    )
+                    return save_result
+            return (
+                f"Attachment '{filename}' not found in email."
+            )
+        finally:
+            client.disconnect()
+
     def filter_emails(
         self,
         subject_pattern: str = "",
