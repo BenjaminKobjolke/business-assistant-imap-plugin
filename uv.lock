@@ -1260,6 +1260,7 @@ requires-dist = [
     { name = "imapclient", specifier = ">=2.3.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
+    { name = "python-dotenv", marker = "extra == 'dev'" },
 ]
 provides-extras = ["dev"]
 
