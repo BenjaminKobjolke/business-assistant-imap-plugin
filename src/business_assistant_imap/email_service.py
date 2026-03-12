@@ -151,6 +151,7 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
                     "from": email_msg.from_address or "(unknown)",
                     "subject": email_msg.subject or "(no subject)",
                     "date": email_msg.date or "",
+                    "tags": email_msg.keywords,
                 })
             return json.dumps({"emails": emails})
         finally:
@@ -196,6 +197,7 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
                         "date": email_msg.date or "",
                         "body": body,
                         "attachments": att_info,
+                        "tags": email_msg.keywords,
                     })
             return "Email not found."
         finally:
@@ -343,12 +345,13 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
             client.disconnect()
 
     def search_emails(
-        self, query: str, folder: str = "INBOX", limit: int = 20
+        self, query: str, folder: str = "INBOX", limit: int = 20,
+        tag: str | None = None,
     ) -> str:
-        """Search emails by query string (From, Subject, Body)."""
+        """Search emails by query string (From, Subject, Body) and/or IMAP tag."""
         logger.info(
-            "search_emails: query=%r, folder=%r, limit=%d",
-            query, folder, limit,
+            "search_emails: query=%r, folder=%r, limit=%d, tag=%r",
+            query, folder, limit, tag,
         )
         client = self._create_client()
         try:
@@ -359,11 +362,19 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
                 )
                 return error
 
-            # Server-side IMAP search for subject and from
+            # Build search criteria
+            if tag and query:
+                criteria: list[str] = [
+                    "KEYWORD", tag, "OR", "SUBJECT", query, "FROM", query,
+                ]
+            elif tag:
+                criteria = ["KEYWORD", tag]
+            else:
+                criteria = ["OR", "SUBJECT", query, "FROM", query]
+
+            # Server-side IMAP search
             messages = client.get_messages(
-                search_criteria=[
-                    "OR", "SUBJECT", query, "FROM", query
-                ],
+                search_criteria=criteria,
                 folder=folder,
                 limit=limit,
                 include_attachments=False,
@@ -372,6 +383,10 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
             if messages:
                 matches = list(messages)
                 logger.info("search_emails: server-side returned %d", len(matches))
+            elif tag:
+                # Tag search is purely server-side; no client fallback
+                logger.info("search_emails: no emails with tag=%r", tag)
+                matches = []
             else:
                 logger.info("search_emails: server-side empty, falling back")
                 messages = client.get_messages(
@@ -411,10 +426,11 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
                 )
 
             if not matches:
+                search_desc = f"tag '{tag}'" if tag else f"'{query}'"
                 logger.info(
-                    "search_emails: no matches for query=%r", query
+                    "search_emails: no matches for %s", search_desc
                 )
-                return f"No emails matching '{query}' found."
+                return f"No emails matching {search_desc} found."
 
             results = []
             for msg_id, email_msg in matches:
@@ -497,5 +513,52 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
             )
             count = len(messages)
             return f"You have {count} unread email(s)."
+        finally:
+            client.disconnect()
+
+    def get_email_tags(self, email_id: str, folder: str = "INBOX") -> str:
+        """Get all tags/keywords on a specific email."""
+        client = self._create_client()
+        try:
+            folder, error = self._resolve_folder(client, folder)
+            if error:
+                return error
+            client.client.select_folder(folder)
+            keywords = client.get_keywords(email_id)
+            return json.dumps({"email_id": email_id, "tags": keywords})
+        finally:
+            client.disconnect()
+
+    def add_email_tag(
+        self, email_id: str, tag: str, folder: str = "INBOX"
+    ) -> str:
+        """Add a tag/keyword to an email."""
+        client = self._create_client()
+        try:
+            folder, error = self._resolve_folder(client, folder)
+            if error:
+                return error
+            client.client.select_folder(folder)
+            success = client.add_keyword(email_id, tag)
+            if success:
+                return f"Tag '{tag}' added to email."
+            return f"Failed to add tag '{tag}'."
+        finally:
+            client.disconnect()
+
+    def remove_email_tag(
+        self, email_id: str, tag: str, folder: str = "INBOX"
+    ) -> str:
+        """Remove a tag/keyword from an email."""
+        client = self._create_client()
+        try:
+            folder, error = self._resolve_folder(client, folder)
+            if error:
+                return error
+            client.client.select_folder(folder)
+            success = client.remove_keyword(email_id, tag)
+            if success:
+                return f"Tag '{tag}' removed from email."
+            return f"Failed to remove tag '{tag}'."
         finally:
             client.disconnect()

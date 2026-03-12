@@ -135,24 +135,30 @@ def _filter_emails(
     )
 
 
-def _search_emails(ctx: RunContext[Deps], query: str, folder: str = "INBOX") -> str:
-    """Search emails by query string. Checks memory for aliases first.
+def _search_emails(
+    ctx: RunContext[Deps], query: str = "", folder: str = "INBOX",
+    tag: str | None = None,
+) -> str:
+    """Search emails by query string and/or IMAP tag. Checks memory for aliases first.
 
     The query is matched against From, Subject, and Body fields.
     Use the folder parameter to search in a specific mailbox folder
     (e.g., folder="Company/Clients/ProjectName"). Do NOT put the folder
     name in the query — use the folder parameter instead.
+    Use the tag parameter to filter by IMAP keyword/tag
+    (e.g., tag="angebot"). Can be combined with query or used alone.
     """
     # Fallback: extract folder from query if agent used "folder:name" syntax
     query, folder = _extract_folder_from_query(query, folder)
 
-    memory = ctx.deps.memory
-    alias = memory.get(query.lower())
-    if alias:
-        logger.info("search_emails: resolved alias %r -> %r", query, alias)
-        query = alias
-    logger.info("search_emails: query=%r folder=%r", query, folder)
-    return _get_service(ctx).search_emails(query, folder=folder)
+    if query:
+        memory = ctx.deps.memory
+        alias = memory.get(query.lower())
+        if alias:
+            logger.info("search_emails: resolved alias %r -> %r", query, alias)
+            query = alias
+    logger.info("search_emails: query=%r folder=%r tag=%r", query, folder, tag)
+    return _get_service(ctx).search_emails(query, folder=folder, tag=tag)
 
 
 def _list_folders(ctx: RunContext[Deps]) -> str:
@@ -404,6 +410,39 @@ def _build_greeting(
     return build_greeting(salutation, skip, formal=formal)
 
 
+def _get_email_tags(
+    ctx: RunContext[Deps], email_id: str, folder: str = "INBOX"
+) -> str:
+    """Get all tags/keywords on a specific email.
+
+    Use folder parameter if the email is not in INBOX.
+    """
+    logger.info("get_email_tags: email_id=%r folder=%r", email_id, folder)
+    return _get_service(ctx).get_email_tags(email_id, folder)
+
+
+def _add_email_tag(
+    ctx: RunContext[Deps], email_id: str, tag: str, folder: str = "INBOX"
+) -> str:
+    """Add a tag/keyword to an email.
+
+    Use folder parameter if the email is not in INBOX.
+    """
+    logger.info("add_email_tag: email_id=%r tag=%r folder=%r", email_id, tag, folder)
+    return _get_service(ctx).add_email_tag(email_id, tag, folder)
+
+
+def _remove_email_tag(
+    ctx: RunContext[Deps], email_id: str, tag: str, folder: str = "INBOX"
+) -> str:
+    """Remove a tag/keyword from an email.
+
+    Use folder parameter if the email is not in INBOX.
+    """
+    logger.info("remove_email_tag: email_id=%r tag=%r folder=%r", email_id, tag, folder)
+    return _get_service(ctx).remove_email_tag(email_id, tag, folder)
+
+
 def _get_database(ctx: RunContext[Deps]) -> Database:
     """Retrieve the Database from plugin_data."""
     return ctx.deps.plugin_data[PLUGIN_DATA_DATABASE]
@@ -481,6 +520,9 @@ def register(registry: PluginRegistry) -> None:
         Tool(_search_sent_to, name="search_sent_to"),
         Tool(_build_greeting, name="build_greeting"),
         Tool(_mark_email_as_done, name="mark_email_as_done"),
+        Tool(_get_email_tags, name="get_email_tags"),
+        Tool(_add_email_tag, name="add_email_tag"),
+        Tool(_remove_email_tag, name="remove_email_tag"),
     ]
 
     info = PluginInfo(

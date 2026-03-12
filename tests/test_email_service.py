@@ -292,6 +292,71 @@ class TestEmailService:
         assert "No emails found in EmptyFolder." in result
 
     @patch("business_assistant_imap.email_service.ImapClient")
+    def test_search_emails_by_tag(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        """Search by IMAP keyword/tag returns matching emails."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX", "Sent"]
+        mock_client.get_messages.return_value = [
+            ("50", FakeEmailMessage(subject="Angebot Projekt X")),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.search_emails("", folder="Sent", tag="angebot")
+
+        data = json.loads(result)
+        assert len(data["results"]) == 1
+        assert data["results"][0]["subject"] == "Angebot Projekt X"
+        # Verify KEYWORD criteria was used
+        call_args = mock_client.get_messages.call_args
+        assert "KEYWORD" in call_args[1]["search_criteria"]
+        assert "angebot" in call_args[1]["search_criteria"]
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_search_emails_by_tag_with_query(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        """Search combining IMAP tag and text query."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client.get_messages.return_value = [
+            ("60", FakeEmailMessage(subject="Invoice for ACME")),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.search_emails("ACME", tag="rechnung")
+
+        data = json.loads(result)
+        assert len(data["results"]) == 1
+        criteria = mock_client.get_messages.call_args[1]["search_criteria"]
+        assert "KEYWORD" in criteria
+        assert "rechnung" in criteria
+        assert "ACME" in criteria
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_search_emails_by_tag_no_matches(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        """Tag search with no results skips client-side fallback."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client.get_messages.return_value = []
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.search_emails("", tag="nonexistent")
+
+        assert "No emails matching tag 'nonexistent' found." in result
+        # Should NOT fall back to client-side (only 1 call)
+        assert mock_client.get_messages.call_count == 1
+
+    @patch("business_assistant_imap.email_service.ImapClient")
     def test_show_email_with_rich_attachment_metadata(
         self, mock_client_cls: MagicMock, email_settings: EmailSettings
     ) -> None:
@@ -434,6 +499,162 @@ class TestEmailService:
         result = service.mark_as_read("42")
 
         assert result == "Failed to mark email as read."
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_show_email_includes_tags(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_messages.return_value = [
+            (
+                "42",
+                FakeEmailMessage(
+                    message_id="42",
+                    subject="Tagged Email",
+                    keywords=["$label1", "important"],
+                ),
+            ),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.show_email("42")
+
+        data = json.loads(result)
+        assert data["tags"] == ["$label1", "important"]
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_list_messages_includes_tags(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client.get_all_messages.return_value = [
+            ("1", FakeEmailMessage(message_id="1", keywords=["todo"])),
+        ]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.list_inbox()
+
+        data = json.loads(result)
+        assert data["emails"][0]["tags"] == ["todo"]
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_get_email_tags_success(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client.get_keywords.return_value = ["$label1", "important"]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.get_email_tags("42")
+
+        data = json.loads(result)
+        assert data["email_id"] == "42"
+        assert data["tags"] == ["$label1", "important"]
+        mock_client.get_keywords.assert_called_once_with("42")
+        mock_client.disconnect.assert_called_once()
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_get_email_tags_empty(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client.get_keywords.return_value = []
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.get_email_tags("42")
+
+        data = json.loads(result)
+        assert data["tags"] == []
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_get_email_tags_invalid_folder(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.get_email_tags("42", folder="nonexistent")
+
+        assert "not found" in result
+        mock_client.get_keywords.assert_not_called()
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_add_email_tag_success(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client.add_keyword.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.add_email_tag("42", "$label1")
+
+        assert result == "Tag '$label1' added to email."
+        mock_client.add_keyword.assert_called_once_with("42", "$label1")
+        mock_client.disconnect.assert_called_once()
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_add_email_tag_failure(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client.add_keyword.return_value = False
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.add_email_tag("42", "$label1")
+
+        assert result == "Failed to add tag '$label1'."
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_remove_email_tag_success(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client.remove_keyword.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.remove_email_tag("42", "todo")
+
+        assert result == "Tag 'todo' removed from email."
+        mock_client.remove_keyword.assert_called_once_with("42", "todo")
+        mock_client.disconnect.assert_called_once()
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_remove_email_tag_failure(
+        self, mock_client_cls: MagicMock, email_settings: EmailSettings
+    ) -> None:
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.list_folders.return_value = ["INBOX"]
+        mock_client.remove_keyword.return_value = False
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.remove_email_tag("42", "todo")
+
+        assert result == "Failed to remove tag 'todo'."
 
     @patch("business_assistant_imap.email_service.ImapClient")
     def test_connection_failure(

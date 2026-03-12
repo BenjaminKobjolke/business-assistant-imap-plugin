@@ -83,9 +83,12 @@ Use unread_only=True to show only unread emails.
 - show_email: Show full details of a specific email by ID (use folder='Sent' for sent emails)
 - get_attachment_url: Upload an email attachment to get a shareable URL. \
 Use when user asks to see/download an attachment or image from an email.
-- search_emails: Search emails by query (from, subject, body). \
+- search_emails: Search emails by query (from, subject, body) and/or IMAP tag. \
 Use the folder parameter to search in a specific folder \
 (e.g., search_emails(query="linux", folder="Clients/Project")). \
+Use the tag parameter to filter by IMAP keyword \
+(e.g., search_emails(tag="angebot", folder="Sent")). \
+query and tag can be combined or used individually. \
 Do NOT put the folder name in the query string.
 - list_folders: List all mailbox folders
 - move_email: Move an email to a different folder
@@ -115,6 +118,10 @@ folder. On first use for a sender, provide target_folder and mapping_type ('pers
 'company'). After that, the tool remembers the folder automatically. \
 A 'person' mapping applies only to the exact sender email address. \
 A 'company' mapping applies to all emails from that sender's domain.
+- get_email_tags: Get all tags/keywords on a specific email (use folder param if not in INBOX)
+- add_email_tag: Add a tag/keyword to an email (use folder param if not in INBOX). \
+Tags are IMAP keywords (e.g., '$label1', 'important', 'todo').
+- remove_email_tag: Remove a tag/keyword from an email (use folder param if not in INBOX)
 
 When the user asks for unread emails, use list_inbox(unread_only=True) or \
 list_messages(folder=..., unread_only=True). Do NOT rely on get_unread_count alone — \
