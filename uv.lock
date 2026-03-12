@@ -352,6 +352,50 @@ dev = [
 ]
 
 [[package]]
+name = "business-assistant-obsidian-plugin"
+version = "0.1.0"
+source = { editable = "../business-assistant-obsidian-plugin" }
+dependencies = [
+    { name = "business-assistant-v2" },
+    { name = "pyobsidian" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "business-assistant-v2", editable = "../business-assistant-v2" },
+    { name = "pyobsidian", specifier = ">=0.2.0,<0.3.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.0.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "ruff", specifier = ">=0.4.0" },
+]
+
+[[package]]
+name = "business-assistant-project-management-plugin"
+version = "0.1.0"
+source = { editable = "../business-assistant-project-management-plugin" }
+dependencies = [
+    { name = "business-assistant-v2" },
+    { name = "sqlalchemy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "business-assistant-v2", editable = "../business-assistant-v2" },
+    { name = "sqlalchemy" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.0.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "ruff", specifier = ">=0.4.0" },
+]
+
+[[package]]
 name = "business-assistant-rtm-plugin"
 version = "0.1.0"
 source = { editable = "../business-assistant-rtm-plugin" }
@@ -403,6 +447,8 @@ dependencies = [
     { name = "bot-commander", extra = ["xmpp"] },
     { name = "business-assistant-calendar-plugin" },
     { name = "business-assistant-imap-plugin" },
+    { name = "business-assistant-obsidian-plugin" },
+    { name = "business-assistant-project-management-plugin" },
     { name = "business-assistant-rtm-plugin" },
     { name = "business-assistant-transcribe-plugin" },
     { name = "pydantic-ai" },
@@ -414,6 +460,8 @@ requires-dist = [
     { name = "bot-commander", extras = ["xmpp"], editable = "../bot-commander" },
     { name = "business-assistant-calendar-plugin", editable = "../business-assistant-calendar-plugin" },
     { name = "business-assistant-imap-plugin", editable = "." },
+    { name = "business-assistant-obsidian-plugin", editable = "../business-assistant-obsidian-plugin" },
+    { name = "business-assistant-project-management-plugin", editable = "../business-assistant-project-management-plugin" },
     { name = "business-assistant-rtm-plugin", editable = "../business-assistant-rtm-plugin" },
     { name = "business-assistant-transcribe-plugin", editable = "../business-assistant-transcribe-plugin" },
     { name = "pydantic-ai" },
@@ -2400,6 +2448,18 @@ wheels = [
 [package.optional-dependencies]
 crypto = [
     { name = "cryptography" },
+]
+
+[[package]]
+name = "pyobsidian"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d7/35/bdd0c4e70977b4a34e7a6471c97578a4f58508de4a2005bf7d6f4654bf18/pyobsidian-0.2.0.tar.gz", hash = "sha256:83d442c5ab998b24ac7aa9024b4146bd1ba2098bebe19d3a261d883a24e9e7c9", size = 15560, upload-time = "2024-06-04T23:59:53.542Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/d9/e2bd62fb2673b5c0101fd218ce57feaa21c752b9e9ef2369b550923a2cd3/pyobsidian-0.2.0-py3-none-any.whl", hash = "sha256:69d96004b17587e3f22c638b51323a942a7efcd90da797e63174f429edf0c633", size = 19016, upload-time = "2024-06-04T23:59:52.464Z" },
 ]
 
 [[package]]
