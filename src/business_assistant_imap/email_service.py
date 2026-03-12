@@ -161,45 +161,45 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
         """Show full details of a specific email."""
         client = self._create_client()
         try:
-            messages = client.get_messages(
-                search_criteria=["ALL"],
-                folder=folder,
+            result = client.get_message_by_id(
+                email_id, folder=folder,
                 include_attachments=True,
             )
-            for msg_id, email_msg in messages:
-                if str(msg_id) == str(email_id):
-                    body = (
-                        email_msg.get_body(MIME_TEXT_PLAIN)
-                        or "(no text body)"
-                    )
-                    to_addr = email_msg.raw_message.get("To", "")
-                    cc_addr = email_msg.raw_message.get("Cc", "")
+            if result is None:
+                return "Email not found."
+            msg_id, email_msg = result
 
-                    att_info: list[dict] = []
-                    for a in email_msg.attachments or []:
-                        entry: dict = {
-                            "filename": a.filename,
-                            "content_type": a.content_type,
-                            "size": len(a.data) if a.data else 0,
-                        }
-                        if a.content_id:
-                            entry["content_id"] = a.content_id
-                        if a.is_inline:
-                            entry["is_inline"] = True
-                        att_info.append(entry)
+            body = (
+                email_msg.get_body(MIME_TEXT_PLAIN)
+                or "(no text body)"
+            )
+            to_addr = email_msg.raw_message.get("To", "")
+            cc_addr = email_msg.raw_message.get("Cc", "")
 
-                    return json.dumps({
-                        "_id": str(msg_id),
-                        "from": email_msg.from_address or "",
-                        "to": to_addr,
-                        "cc": cc_addr,
-                        "subject": email_msg.subject or "",
-                        "date": email_msg.date or "",
-                        "body": body,
-                        "attachments": att_info,
-                        "tags": email_msg.keywords,
-                    })
-            return "Email not found."
+            att_info: list[dict] = []
+            for a in email_msg.attachments or []:
+                entry: dict = {
+                    "filename": a.filename,
+                    "content_type": a.content_type,
+                    "size": len(a.data) if a.data else 0,
+                }
+                if a.content_id:
+                    entry["content_id"] = a.content_id
+                if a.is_inline:
+                    entry["is_inline"] = True
+                att_info.append(entry)
+
+            return json.dumps({
+                "_id": str(msg_id),
+                "from": email_msg.from_address or "",
+                "to": to_addr,
+                "cc": cc_addr,
+                "subject": email_msg.subject or "",
+                "date": email_msg.date or "",
+                "body": body,
+                "attachments": att_info,
+                "tags": email_msg.keywords,
+            })
         finally:
             client.disconnect()
 
@@ -216,36 +216,36 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
 
         client = self._create_client()
         try:
-            messages = client.get_messages(
-                search_criteria=["ALL"],
-                folder=folder,
+            result = client.get_message_by_id(
+                email_id, folder=folder,
                 include_attachments=True,
             )
-            for msg_id, email_msg in messages:
-                if str(msg_id) == str(email_id):
-                    for a in email_msg.attachments or []:
-                        if a.filename == filename:
-                            try:
-                                url = ftp_service.upload(
-                                    a.data, a.filename
-                                )
-                            except Exception:
-                                logger.warning(
-                                    "FTP upload failed for %s",
-                                    a.filename,
-                                )
-                                return (
-                                    f"FTP upload failed for '{filename}'."
-                                )
-                            return json.dumps({
-                                "filename": a.filename,
-                                "url": url,
-                                "content_type": a.content_type,
-                            })
-                    return (
-                        f"Attachment '{filename}' not found in email."
-                    )
-            return "Email not found."
+            if result is None:
+                return "Email not found."
+            msg_id, email_msg = result
+
+            for a in email_msg.attachments or []:
+                if a.filename == filename:
+                    try:
+                        url = ftp_service.upload(
+                            a.data, a.filename
+                        )
+                    except Exception:
+                        logger.warning(
+                            "FTP upload failed for %s",
+                            a.filename,
+                        )
+                        return (
+                            f"FTP upload failed for '{filename}'."
+                        )
+                    return json.dumps({
+                        "filename": a.filename,
+                        "url": url,
+                        "content_type": a.content_type,
+                    })
+            return (
+                f"Attachment '{filename}' not found in email."
+            )
         finally:
             client.disconnect()
 

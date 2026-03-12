@@ -29,7 +29,7 @@ def _mock_client_with_email(
     fake_msg = MagicMock()
     fake_msg.from_address = from_address
     mock_client = MagicMock()
-    mock_client.get_messages.return_value = [(int(email_id), fake_msg)]
+    mock_client.get_message_by_id.return_value = (str(email_id), fake_msg)
     mock_client.move_to_folder.return_value = True
     mock_client.client.select_folder = MagicMock()
     return mock_client
@@ -194,7 +194,7 @@ class TestMarkAsDoneLookupPriority:
 class TestMarkAsDoneEdgeCases:
     def test_email_not_found(self, service: EmailService, db: Database) -> None:
         mock_client = MagicMock()
-        mock_client.get_messages.return_value = []
+        mock_client.get_message_by_id.return_value = None
 
         with patch.object(service, "_create_client", return_value=mock_client):
             result = service.mark_as_done("999", database=db)
@@ -233,8 +233,8 @@ class TestMarkAsDoneEdgeCases:
         with patch.object(service, "_create_client", return_value=mock_client):
             result = service.mark_as_done("100", database=db, folder="Work/Pending")
 
-        mock_client.get_messages.assert_called_once_with(
-            search_criteria=["ALL"],
+        mock_client.get_message_by_id.assert_called_once_with(
+            "100",
             folder="Work/Pending",
             include_attachments=False,
         )

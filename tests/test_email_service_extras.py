@@ -18,22 +18,20 @@ class TestGetAttachmentUrl:
     ) -> None:
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_messages.return_value = [
-            (
-                "60",
-                FakeEmailMessage(
-                    message_id="60",
-                    subject="With Attachment",
-                    attachments=[
-                        FakeAttachment(
-                            filename="image.png",
-                            content_type="image/png",
-                            data=b"imagedata",
-                        ),
-                    ],
-                ),
+        mock_client.get_message_by_id.return_value = (
+            "60",
+            FakeEmailMessage(
+                message_id="60",
+                subject="With Attachment",
+                attachments=[
+                    FakeAttachment(
+                        filename="image.png",
+                        content_type="image/png",
+                        data=b"imagedata",
+                    ),
+                ],
             ),
-        ]
+        )
         mock_client_cls.return_value = mock_client
 
         mock_ftp = MagicMock()
@@ -56,7 +54,7 @@ class TestGetAttachmentUrl:
     ) -> None:
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_messages.return_value = []
+        mock_client.get_message_by_id.return_value = None
         mock_client_cls.return_value = mock_client
 
         mock_ftp = MagicMock()
@@ -73,22 +71,20 @@ class TestGetAttachmentUrl:
     ) -> None:
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_messages.return_value = [
-            (
-                "70",
-                FakeEmailMessage(
-                    message_id="70",
-                    subject="Other Attachment",
-                    attachments=[
-                        FakeAttachment(
-                            filename="report.pdf",
-                            content_type="application/pdf",
-                            data=b"pdfdata",
-                        ),
-                    ],
-                ),
+        mock_client.get_message_by_id.return_value = (
+            "70",
+            FakeEmailMessage(
+                message_id="70",
+                subject="Other Attachment",
+                attachments=[
+                    FakeAttachment(
+                        filename="report.pdf",
+                        content_type="application/pdf",
+                        data=b"pdfdata",
+                    ),
+                ],
             ),
-        ]
+        )
         mock_client_cls.return_value = mock_client
 
         mock_ftp = MagicMock()
@@ -115,22 +111,20 @@ class TestGetAttachmentUrl:
     ) -> None:
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_messages.return_value = [
-            (
-                "80",
-                FakeEmailMessage(
-                    message_id="80",
-                    subject="FTP Failure",
-                    attachments=[
-                        FakeAttachment(
-                            filename="file.txt",
-                            content_type="text/plain",
-                            data=b"content",
-                        ),
-                    ],
-                ),
+        mock_client.get_message_by_id.return_value = (
+            "80",
+            FakeEmailMessage(
+                message_id="80",
+                subject="FTP Failure",
+                attachments=[
+                    FakeAttachment(
+                        filename="file.txt",
+                        content_type="text/plain",
+                        data=b"content",
+                    ),
+                ],
             ),
-        ]
+        )
         mock_client_cls.return_value = mock_client
 
         mock_ftp = MagicMock()

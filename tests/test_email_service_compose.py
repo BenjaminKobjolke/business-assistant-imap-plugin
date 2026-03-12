@@ -228,9 +228,9 @@ class TestDraftReplyWithoutFooter:
         mock_save_draft.return_value = True
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_all_messages.return_value = [
-            ("1", FakeEmailMessage(message_id="1")),
-        ]
+        mock_client.get_message_by_id.return_value = (
+            "1", FakeEmailMessage(message_id="1"),
+        )
         mock_client_cls.return_value = mock_client
 
         service = EmailService(settings)
@@ -400,7 +400,7 @@ class TestForwardEmail:
                 ),
             ],
         )
-        mock_client.get_messages.return_value = [("90", fake_msg)]
+        mock_client.get_message_by_id.return_value = ("90", fake_msg)
         mock_client.send_email.return_value = True
         mock_client.save_draft.return_value = True
         mock_client_cls.return_value = mock_client
@@ -426,7 +426,7 @@ class TestForwardEmail:
     ) -> None:
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_messages.return_value = []
+        mock_client.get_message_by_id.return_value = None
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
@@ -443,7 +443,7 @@ class TestForwardEmail:
         mock_client = MagicMock()
         mock_client.connect.return_value = True
         fake_msg = FakeEmailMessage(message_id="91", subject="Test")
-        mock_client.get_messages.return_value = [("91", fake_msg)]
+        mock_client.get_message_by_id.return_value = ("91", fake_msg)
         mock_client.send_email.return_value = False
         mock_client_cls.return_value = mock_client
 
@@ -465,7 +465,7 @@ class TestForwardEmail:
         fake_msg = FakeEmailMessage(
             message_id="92", subject="Test Forward"
         )
-        mock_client.get_messages.return_value = [("92", fake_msg)]
+        mock_client.get_message_by_id.return_value = ("92", fake_msg)
         mock_client.send_email.return_value = True
         mock_client.save_draft.side_effect = Exception("IMAP error")
         mock_client_cls.return_value = mock_client
@@ -505,7 +505,7 @@ class TestDraftForward:
             body_plain="Original body text.",
             attachments=attachments,
         )
-        mock_client.get_messages.return_value = [("100", fake_msg)]
+        mock_client.get_message_by_id.return_value = ("100", fake_msg)
         mock_client.save_draft.return_value = True
         mock_client_cls.return_value = mock_client
 
@@ -529,7 +529,7 @@ class TestDraftForward:
     ) -> None:
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_messages.return_value = []
+        mock_client.get_message_by_id.return_value = None
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
@@ -546,7 +546,7 @@ class TestDraftForward:
         mock_client = MagicMock()
         mock_client.connect.return_value = True
         fake_msg = FakeEmailMessage(message_id="101", subject="Test")
-        mock_client.get_messages.return_value = [("101", fake_msg)]
+        mock_client.get_message_by_id.return_value = ("101", fake_msg)
         mock_client.save_draft.return_value = False
         mock_client_cls.return_value = mock_client
 
@@ -571,16 +571,17 @@ class TestDraftReplyFolder:
         mock_save_draft.return_value = True
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_all_messages.return_value = [
-            ("1", FakeEmailMessage(message_id="1")),
-        ]
+        mock_client.get_message_by_id.return_value = (
+            "1", FakeEmailMessage(message_id="1"),
+        )
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
         service.draft_reply("1", "Thanks!", folder="Company/Projects")
 
-        mock_client.get_all_messages.assert_called_once_with(
-            folder="Company/Projects"
+        mock_client.get_message_by_id.assert_called_once_with(
+            "1", folder="Company/Projects",
+            include_attachments=False,
         )
 
     @patch("business_assistant_imap.email_service.ImapClient")
@@ -592,9 +593,9 @@ class TestDraftReplyFolder:
         """send_reply uses the folder parameter."""
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_all_messages.return_value = [
-            ("1", FakeEmailMessage(message_id="1")),
-        ]
+        mock_client.get_message_by_id.return_value = (
+            "1", FakeEmailMessage(message_id="1"),
+        )
         mock_client.send_email.return_value = True
         mock_client.save_draft.return_value = True
         mock_client_cls.return_value = mock_client
@@ -602,8 +603,9 @@ class TestDraftReplyFolder:
         service = EmailService(email_settings)
         service.send_reply("1", "Thanks!", folder="Company/Projects")
 
-        mock_client.get_all_messages.assert_called_once_with(
-            folder="Company/Projects"
+        mock_client.get_message_by_id.assert_called_once_with(
+            "1", folder="Company/Projects",
+            include_attachments=False,
         )
 
     @patch("business_assistant_imap.email_service.ImapClient")
@@ -615,9 +617,9 @@ class TestDraftReplyFolder:
         """send_reply saves a copy to the Sent folder after sending."""
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_all_messages.return_value = [
-            ("1", FakeEmailMessage(message_id="1")),
-        ]
+        mock_client.get_message_by_id.return_value = (
+            "1", FakeEmailMessage(message_id="1"),
+        )
         mock_client.send_email.return_value = True
         mock_client.save_draft.return_value = True
         mock_client_cls.return_value = mock_client
@@ -640,9 +642,9 @@ class TestDraftReplyFolder:
         """send_reply succeeds even if saving to Sent folder fails."""
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_all_messages.return_value = [
-            ("1", FakeEmailMessage(message_id="1")),
-        ]
+        mock_client.get_message_by_id.return_value = (
+            "1", FakeEmailMessage(message_id="1"),
+        )
         mock_client.send_email.return_value = True
         mock_client.save_draft.side_effect = Exception("IMAP error")
         mock_client_cls.return_value = mock_client
@@ -661,9 +663,9 @@ class TestDraftReplyFolder:
         """send_reply does not save to Sent when send fails."""
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_all_messages.return_value = [
-            ("1", FakeEmailMessage(message_id="1")),
-        ]
+        mock_client.get_message_by_id.return_value = (
+            "1", FakeEmailMessage(message_id="1"),
+        )
         mock_client.send_email.return_value = False
         mock_client_cls.return_value = mock_client
 

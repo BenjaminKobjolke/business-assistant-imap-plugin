@@ -123,24 +123,28 @@ class ComposeMixin:
         """Save a reply draft to an email."""
         client = self._create_client()
         try:
-            messages = client.get_all_messages(folder=folder)
-            for msg_id, email_msg in (messages or []):
-                if str(msg_id) == str(email_id):
-                    content, html_body = self._build_reply(
-                        email_msg, reply_body, greeting,
-                        include_footer=include_footer,
-                    )
-                    success = save_draft_to_imap(
-                        client=client,
-                        to_address=content.to_address,
-                        subject=content.subject,
-                        html_body=html_body,
-                        from_email=self._settings.from_address,
-                    )
-                    if success:
-                        return "Draft reply saved."
-                    return "Failed to save draft reply."
-            return "Email not found."
+            result = client.get_message_by_id(
+                email_id, folder=folder,
+                include_attachments=False,
+            )
+            if result is None:
+                return "Email not found."
+            msg_id, email_msg = result
+
+            content, html_body = self._build_reply(
+                email_msg, reply_body, greeting,
+                include_footer=include_footer,
+            )
+            success = save_draft_to_imap(
+                client=client,
+                to_address=content.to_address,
+                subject=content.subject,
+                html_body=html_body,
+                from_email=self._settings.from_address,
+            )
+            if success:
+                return "Draft reply saved."
+            return "Failed to save draft reply."
         finally:
             client.disconnect()
 
@@ -155,31 +159,35 @@ class ComposeMixin:
         """Send a reply to an email directly via SMTP."""
         client = self._create_client()
         try:
-            messages = client.get_all_messages(folder=folder)
-            for msg_id, email_msg in (messages or []):
-                if str(msg_id) == str(email_id):
-                    content, html_body = self._build_reply(
-                        email_msg, reply_body, greeting,
-                        include_footer=include_footer,
-                    )
-                    success = client.send_email(
-                        to_addresses=[content.to_address],
-                        subject=content.subject,
-                        body=html_body,
-                        content_type="text/html",
-                        from_email=self._settings.from_address,
-                        **self._smtp_kwargs(),
-                    )
-                    if success:
-                        self._save_to_sent(
-                            client,
-                            [content.to_address],
-                            content.subject,
-                            html_body,
-                        )
-                        return "Reply sent."
-                    return "Failed to send reply."
-            return "Email not found."
+            result = client.get_message_by_id(
+                email_id, folder=folder,
+                include_attachments=False,
+            )
+            if result is None:
+                return "Email not found."
+            msg_id, email_msg = result
+
+            content, html_body = self._build_reply(
+                email_msg, reply_body, greeting,
+                include_footer=include_footer,
+            )
+            success = client.send_email(
+                to_addresses=[content.to_address],
+                subject=content.subject,
+                body=html_body,
+                content_type="text/html",
+                from_email=self._settings.from_address,
+                **self._smtp_kwargs(),
+            )
+            if success:
+                self._save_to_sent(
+                    client,
+                    [content.to_address],
+                    content.subject,
+                    html_body,
+                )
+                return "Reply sent."
+            return "Failed to send reply."
         finally:
             client.disconnect()
 
@@ -194,38 +202,38 @@ class ComposeMixin:
         """Forward an email preserving all attachments and inline images."""
         client = self._create_client()
         try:
-            messages = client.get_messages(
-                search_criteria=["ALL"],
-                folder=folder,
+            result = client.get_message_by_id(
+                email_id, folder=folder,
                 include_attachments=True,
             )
-            for msg_id, email_msg in messages:
-                if str(msg_id) == str(email_id):
-                    subject, html_body, attachments = self._build_forward(
-                        email_msg, additional_message,
-                        include_footer=include_footer,
-                    )
-                    success = client.send_email(
-                        to_addresses=to_addresses,
-                        subject=subject,
-                        body=html_body,
-                        content_type="text/html",
-                        from_email=self._settings.from_address,
-                        attachments=attachments,
-                        **self._smtp_kwargs(),
-                    )
-                    if success:
-                        self._save_to_sent(
-                            client,
-                            to_addresses,
-                            subject,
-                            html_body,
-                            attachments,
-                        )
-                        recipients = ", ".join(to_addresses)
-                        return f"Email forwarded to {recipients}."
-                    return "Failed to forward email."
-            return "Email not found."
+            if result is None:
+                return "Email not found."
+            msg_id, email_msg = result
+
+            subject, html_body, attachments = self._build_forward(
+                email_msg, additional_message,
+                include_footer=include_footer,
+            )
+            success = client.send_email(
+                to_addresses=to_addresses,
+                subject=subject,
+                body=html_body,
+                content_type="text/html",
+                from_email=self._settings.from_address,
+                attachments=attachments,
+                **self._smtp_kwargs(),
+            )
+            if success:
+                self._save_to_sent(
+                    client,
+                    to_addresses,
+                    subject,
+                    html_body,
+                    attachments,
+                )
+                recipients = ", ".join(to_addresses)
+                return f"Email forwarded to {recipients}."
+            return "Failed to forward email."
         finally:
             client.disconnect()
 
@@ -240,35 +248,35 @@ class ComposeMixin:
         """Save a forward draft preserving attachments and inline images."""
         client = self._create_client()
         try:
-            messages = client.get_messages(
-                search_criteria=["ALL"],
-                folder=folder,
+            result = client.get_message_by_id(
+                email_id, folder=folder,
                 include_attachments=True,
             )
-            for msg_id, email_msg in messages:
-                if str(msg_id) == str(email_id):
-                    subject, html_body, attachments = self._build_forward(
-                        email_msg, additional_message,
-                        include_footer=include_footer,
-                    )
-                    try:
-                        success = client.save_draft(
-                            to_addresses=[to_address],
-                            subject=subject,
-                            body=html_body,
-                            from_email=self._settings.from_address,
-                            content_type=MIME_TEXT_HTML,
-                            attachments=attachments,
-                        )
-                        if success:
-                            return "Forward draft saved."
-                        return "Failed to save forward draft."
-                    except Exception as e:
-                        logger.error(
-                            "Error saving forward draft: %s", e
-                        )
-                        return "Failed to save forward draft."
-            return "Email not found."
+            if result is None:
+                return "Email not found."
+            msg_id, email_msg = result
+
+            subject, html_body, attachments = self._build_forward(
+                email_msg, additional_message,
+                include_footer=include_footer,
+            )
+            try:
+                success = client.save_draft(
+                    to_addresses=[to_address],
+                    subject=subject,
+                    body=html_body,
+                    from_email=self._settings.from_address,
+                    content_type=MIME_TEXT_HTML,
+                    attachments=attachments,
+                )
+                if success:
+                    return "Forward draft saved."
+                return "Failed to save forward draft."
+            except Exception as e:
+                logger.error(
+                    "Error saving forward draft: %s", e
+                )
+                return "Failed to save forward draft."
         finally:
             client.disconnect()
 

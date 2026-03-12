@@ -24,39 +24,43 @@ class MeetingMixin:
         """Get meeting/calendar details from an email."""
         client = self._create_client()
         try:
-            messages = client.get_all_messages(folder=folder)
-            for msg_id, email_msg in (messages or []):
-                if str(msg_id) == str(email_id):
-                    dtstart, dtend = extract_meeting_times(email_msg)
-                    if dtstart is None:
-                        return "No meeting data found in this email."
+            result = client.get_message_by_id(
+                email_id, folder=folder,
+                include_attachments=True,
+            )
+            if result is None:
+                return "Email not found."
+            msg_id, email_msg = result
 
-                    ics_data = extract_ics_data(email_msg)
-                    ics_text = (
-                        ics_data.decode("utf-8", errors="replace")
-                        if ics_data
-                        else None
-                    )
-                    parsed = parse_vevent(ics_text) if ics_text else None
+            dtstart, dtend = extract_meeting_times(email_msg)
+            if dtstart is None:
+                return "No meeting data found in this email."
 
-                    info: dict[str, str | None] = {
-                        "_id": str(msg_id),
-                        "start": dtstart.strftime("%Y-%m-%d %H:%M %Z"),
-                        "end": (
-                            dtend.strftime("%Y-%m-%d %H:%M %Z")
-                            if dtend
-                            else None
-                        ),
-                        "organizer": None,
-                        "location": None,
-                    }
-                    if parsed:
-                        info["organizer"] = parsed.get("organizer")
-                        info["location"] = parsed.get("location")
-                    return json.dumps(
-                        {k: v for k, v in info.items() if v is not None}
-                    )
-            return "Email not found."
+            ics_data = extract_ics_data(email_msg)
+            ics_text = (
+                ics_data.decode("utf-8", errors="replace")
+                if ics_data
+                else None
+            )
+            parsed = parse_vevent(ics_text) if ics_text else None
+
+            info: dict[str, str | None] = {
+                "_id": str(msg_id),
+                "start": dtstart.strftime("%Y-%m-%d %H:%M %Z"),
+                "end": (
+                    dtend.strftime("%Y-%m-%d %H:%M %Z")
+                    if dtend
+                    else None
+                ),
+                "organizer": None,
+                "location": None,
+            }
+            if parsed:
+                info["organizer"] = parsed.get("organizer")
+                info["location"] = parsed.get("location")
+            return json.dumps(
+                {k: v for k, v in info.items() if v is not None}
+            )
         finally:
             client.disconnect()
 
@@ -95,26 +99,30 @@ class MeetingMixin:
         """Extract meeting links (Teams, Zoom, Meet) from an email."""
         client = self._create_client()
         try:
-            messages = client.get_all_messages(folder=folder)
-            for msg_id, email_msg in (messages or []):
-                if str(msg_id) == str(email_id):
-                    ics_data = extract_ics_data(email_msg)
-                    ics_text = (
-                        ics_data.decode("utf-8", errors="replace")
-                        if ics_data
-                        else None
-                    )
-                    links = extract_meeting_links(email_msg, ics_text)
-                    if not links:
-                        return "No meeting links found in this email."
-                    return json.dumps({
-                        "_id": str(msg_id),
-                        "links": [
-                            {"type": lnk["type"], "url": lnk["url"]}
-                            for lnk in links
-                        ],
-                    })
-            return "Email not found."
+            result = client.get_message_by_id(
+                email_id, folder=folder,
+                include_attachments=True,
+            )
+            if result is None:
+                return "Email not found."
+            msg_id, email_msg = result
+
+            ics_data = extract_ics_data(email_msg)
+            ics_text = (
+                ics_data.decode("utf-8", errors="replace")
+                if ics_data
+                else None
+            )
+            links = extract_meeting_links(email_msg, ics_text)
+            if not links:
+                return "No meeting links found in this email."
+            return json.dumps({
+                "_id": str(msg_id),
+                "links": [
+                    {"type": lnk["type"], "url": lnk["url"]}
+                    for lnk in links
+                ],
+            })
         finally:
             client.disconnect()
 
@@ -124,37 +132,41 @@ class MeetingMixin:
         """Check if an email contains a calendar invite."""
         client = self._create_client()
         try:
-            messages = client.get_all_messages(folder=folder)
-            for msg_id, email_msg in (messages or []):
-                if str(msg_id) == str(email_id):
-                    invite = detect_invite(str(msg_id), email_msg)
-                    if invite is None:
-                        return (
-                            "This email does not contain a calendar invite."
-                        )
-                    info: dict[str, str | bool | None] = {
-                        "_id": str(msg_id),
-                        "subject": invite.summary or invite.subject,
-                    }
-                    if invite.dtstart:
-                        info["when"] = invite.dtstart.strftime(
-                            "%Y-%m-%d %H:%M"
-                        )
-                        if invite.dtend:
-                            info["until"] = invite.dtend.strftime("%H:%M")
-                    if invite.organizer:
-                        info["organizer"] = invite.organizer
-                    if invite.location:
-                        info["location"] = invite.location
-                    if invite.is_cancellation:
-                        info["cancelled"] = True
-                    if invite.ics_data:
-                        sanitized = invite.ics_data.replace(b"\x00", b"")
-                        info["ics_data"] = sanitized.decode(
-                            "utf-8", errors="replace"
-                        )
-                    return json.dumps(info)
-            return "Email not found."
+            result = client.get_message_by_id(
+                email_id, folder=folder,
+                include_attachments=True,
+            )
+            if result is None:
+                return "Email not found."
+            msg_id, email_msg = result
+
+            invite = detect_invite(str(msg_id), email_msg)
+            if invite is None:
+                return (
+                    "This email does not contain a calendar invite."
+                )
+            info: dict[str, str | bool | None] = {
+                "_id": str(msg_id),
+                "subject": invite.summary or invite.subject,
+            }
+            if invite.dtstart:
+                info["when"] = invite.dtstart.strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                if invite.dtend:
+                    info["until"] = invite.dtend.strftime("%H:%M")
+            if invite.organizer:
+                info["organizer"] = invite.organizer
+            if invite.location:
+                info["location"] = invite.location
+            if invite.is_cancellation:
+                info["cancelled"] = True
+            if invite.ics_data:
+                sanitized = invite.ics_data.replace(b"\x00", b"")
+                info["ics_data"] = sanitized.decode(
+                    "utf-8", errors="replace"
+                )
+            return json.dumps(info)
         finally:
             client.disconnect()
 
@@ -164,27 +176,31 @@ class MeetingMixin:
         """Accept or decline a meeting invite by sending an RSVP."""
         client = self._create_client()
         try:
-            messages = client.get_all_messages(folder=folder)
-            for msg_id, email_msg in (messages or []):
-                if str(msg_id) == str(email_id):
-                    invite = detect_invite(str(msg_id), email_msg)
-                    if invite is None:
-                        return (
-                            "This email does not contain a calendar invite."
-                        )
+            result = client.get_message_by_id(
+                email_id, folder=folder,
+                include_attachments=True,
+            )
+            if result is None:
+                return "Email not found."
+            msg_id, email_msg = result
 
-                    success = send_rsvp(
-                        smtp_settings=self._settings.smtp,
-                        invite=invite,
-                        user_email=self._settings.from_address,
-                        status=status.upper(),
-                    )
-                    if success:
-                        return (
-                            f"RSVP ({status}) sent to "
-                            f"{invite.organizer_email}."
-                        )
-                    return "Failed to send RSVP."
-            return "Email not found."
+            invite = detect_invite(str(msg_id), email_msg)
+            if invite is None:
+                return (
+                    "This email does not contain a calendar invite."
+                )
+
+            success = send_rsvp(
+                smtp_settings=self._settings.smtp,
+                invite=invite,
+                user_email=self._settings.from_address,
+                status=status.upper(),
+            )
+            if success:
+                return (
+                    f"RSVP ({status}) sent to "
+                    f"{invite.organizer_email}."
+                )
+            return "Failed to send RSVP."
         finally:
             client.disconnect()

@@ -40,9 +40,9 @@ class TestMeetingOperations:
 
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_all_messages.return_value = [
-            ("1", FakeEmailMessage(message_id="1")),
-        ]
+        mock_client.get_message_by_id.return_value = (
+            "1", FakeEmailMessage(message_id="1"),
+        )
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
@@ -86,9 +86,9 @@ class TestMeetingOperations:
 
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_all_messages.return_value = [
-            ("1", FakeEmailMessage(message_id="1")),
-        ]
+        mock_client.get_message_by_id.return_value = (
+            "1", FakeEmailMessage(message_id="1"),
+        )
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
@@ -113,16 +113,17 @@ class TestMeetingOperations:
         mock_extract.return_value = (None, None)
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_all_messages.return_value = [
-            ("1", FakeEmailMessage(message_id="1")),
-        ]
+        mock_client.get_message_by_id.return_value = (
+            "1", FakeEmailMessage(message_id="1"),
+        )
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
         service.get_meeting_info("1", folder="Company/Meetings")
 
-        mock_client.get_all_messages.assert_called_once_with(
-            folder="Company/Meetings"
+        mock_client.get_message_by_id.assert_called_once_with(
+            "1", folder="Company/Meetings",
+            include_attachments=True,
         )
 
     @patch("business_assistant_imap.email_service.ImapClient")
@@ -134,16 +135,17 @@ class TestMeetingOperations:
         """get_meeting_links uses the folder parameter."""
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_all_messages.return_value = [
-            ("1", FakeEmailMessage(message_id="1")),
-        ]
+        mock_client.get_message_by_id.return_value = (
+            "1", FakeEmailMessage(message_id="1"),
+        )
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
         service.get_meeting_links("1", folder="Company/Meetings")
 
-        mock_client.get_all_messages.assert_called_once_with(
-            folder="Company/Meetings"
+        mock_client.get_message_by_id.assert_called_once_with(
+            "1", folder="Company/Meetings",
+            include_attachments=True,
         )
 
     @patch("business_assistant_imap.email_service_meeting.detect_invite")
@@ -158,16 +160,17 @@ class TestMeetingOperations:
         mock_detect.return_value = None
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_all_messages.return_value = [
-            ("1", FakeEmailMessage(message_id="1")),
-        ]
+        mock_client.get_message_by_id.return_value = (
+            "1", FakeEmailMessage(message_id="1"),
+        )
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
         service.detect_invite_in_email("1", folder="Archive")
 
-        mock_client.get_all_messages.assert_called_once_with(
-            folder="Archive"
+        mock_client.get_message_by_id.assert_called_once_with(
+            "1", folder="Archive",
+            include_attachments=True,
         )
 
     @patch("business_assistant_imap.email_service_meeting.detect_invite")
@@ -182,14 +185,15 @@ class TestMeetingOperations:
         mock_detect.return_value = None
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_all_messages.return_value = [
-            ("1", FakeEmailMessage(message_id="1")),
-        ]
+        mock_client.get_message_by_id.return_value = (
+            "1", FakeEmailMessage(message_id="1"),
+        )
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
         service.send_rsvp_for_email("1", folder="Archive")
 
-        mock_client.get_all_messages.assert_called_once_with(
-            folder="Archive"
+        mock_client.get_message_by_id.assert_called_once_with(
+            "1", folder="Archive",
+            include_attachments=True,
         )

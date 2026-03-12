@@ -146,18 +146,16 @@ class TestEmailService:
     ) -> None:
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_messages.return_value = [
-            (
-                "42",
-                FakeEmailMessage(
-                    message_id="42",
-                    subject="Hintergrundbilder",
-                    body_plain="Hier ist der Link.",
-                    to_address="bob@example.com",
-                    cc_address="cc@example.com",
-                ),
+        mock_client.get_message_by_id.return_value = (
+            "42",
+            FakeEmailMessage(
+                message_id="42",
+                subject="Hintergrundbilder",
+                body_plain="Hier ist der Link.",
+                to_address="bob@example.com",
+                cc_address="cc@example.com",
             ),
-        ]
+        )
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
@@ -362,31 +360,29 @@ class TestEmailService:
     ) -> None:
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_messages.return_value = [
-            (
-                "50",
-                FakeEmailMessage(
-                    message_id="50",
-                    subject="With Attachments",
-                    to_address="recipient@example.com",
-                    cc_address="cc1@example.com, cc2@example.com",
-                    attachments=[
-                        FakeAttachment(
-                            filename="logo.png",
-                            content_type="image/png",
-                            data=b"\x89PNG" * 100,
-                            content_id="cid-logo-123",
-                            is_inline=True,
-                        ),
-                        FakeAttachment(
-                            filename="report.pdf",
-                            content_type="application/pdf",
-                            data=b"%PDF" * 50,
-                        ),
-                    ],
-                ),
+        mock_client.get_message_by_id.return_value = (
+            "50",
+            FakeEmailMessage(
+                message_id="50",
+                subject="With Attachments",
+                to_address="recipient@example.com",
+                cc_address="cc1@example.com, cc2@example.com",
+                attachments=[
+                    FakeAttachment(
+                        filename="logo.png",
+                        content_type="image/png",
+                        data=b"\x89PNG" * 100,
+                        content_id="cid-logo-123",
+                        is_inline=True,
+                    ),
+                    FakeAttachment(
+                        filename="report.pdf",
+                        content_type="application/pdf",
+                        data=b"%PDF" * 50,
+                    ),
+                ],
             ),
-        ]
+        )
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)
@@ -506,16 +502,14 @@ class TestEmailService:
     ) -> None:
         mock_client = MagicMock()
         mock_client.connect.return_value = True
-        mock_client.get_messages.return_value = [
-            (
-                "42",
-                FakeEmailMessage(
-                    message_id="42",
-                    subject="Tagged Email",
-                    keywords=["$label1", "important"],
-                ),
+        mock_client.get_message_by_id.return_value = (
+            "42",
+            FakeEmailMessage(
+                message_id="42",
+                subject="Tagged Email",
+                keywords=["$label1", "important"],
             ),
-        ]
+        )
         mock_client_cls.return_value = mock_client
 
         service = EmailService(email_settings)

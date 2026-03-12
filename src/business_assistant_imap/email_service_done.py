@@ -39,72 +39,69 @@ class DoneMixin:
         """
         client = self._create_client()
         try:
-            messages = client.get_messages(
-                search_criteria=["ALL"],
-                folder=folder,
+            result = client.get_message_by_id(
+                email_id, folder=folder,
                 include_attachments=False,
             )
-            for msg_id, email_msg in messages:
-                if str(msg_id) != str(email_id):
-                    continue
+            if result is None:
+                return "Email not found."
+            msg_id, email_msg = result
 
-                sender = _extract_sender(email_msg.from_address or "")
-                if not sender:
-                    return "Could not determine sender address."
+            sender = _extract_sender(email_msg.from_address or "")
+            if not sender:
+                return "Could not determine sender address."
 
-                mapping = database.get_folder_mapping(sender)
+            mapping = database.get_folder_mapping(sender)
 
-                # Case 1: no target_folder provided
-                if not target_folder:
-                    if mapping:
-                        # Known mapping → move
-                        return self._do_move(
-                            client, email_id, mapping.folder, folder
-                        )
-                    return (
-                        f"No target folder configured for {sender}. "
-                        "Please call again with target_folder and "
-                        "mapping_type ('person' or 'company')."
+            # Case 1: no target_folder provided
+            if not target_folder:
+                if mapping:
+                    # Known mapping → move
+                    return self._do_move(
+                        client, email_id, mapping.folder, folder
                     )
-
-                # Case 2: target_folder provided without mapping_type
-                if not mapping_type:
-                    if mapping:
-                        # Update existing mapping's folder, keep type
-                        database.set_folder_mapping(
-                            mapping.identifier, target_folder, mapping.mapping_type
-                        )
-                        return self._do_move(
-                            client, email_id, target_folder, folder
-                        )
-                    return (
-                        "Please specify mapping_type: 'person' "
-                        "(only this exact email) or 'company' "
-                        "(all emails from @domain)."
-                    )
-
-                # Case 3: target_folder + mapping_type provided
-                if mapping_type == "person":
-                    identifier = sender
-                elif mapping_type == "company":
-                    domain = sender.split("@")[-1] if "@" in sender else ""
-                    if not domain:
-                        return "Cannot determine domain from sender address."
-                    identifier = f"@{domain}"
-                else:
-                    return (
-                        f"Invalid mapping_type '{mapping_type}'. "
-                        "Use 'person' or 'company'."
-                    )
-
-                database.set_folder_mapping(
-                    identifier, target_folder, mapping_type
-                )
-                return self._do_move(
-                    client, email_id, target_folder, folder
+                return (
+                    f"No target folder configured for {sender}. "
+                    "Please call again with target_folder and "
+                    "mapping_type ('person' or 'company')."
                 )
 
-            return "Email not found."
+            # Case 2: target_folder provided without mapping_type
+            if not mapping_type:
+                if mapping:
+                    # Update existing mapping's folder, keep type
+                    database.set_folder_mapping(
+                        mapping.identifier, target_folder, mapping.mapping_type
+                    )
+                    return self._do_move(
+                        client, email_id, target_folder, folder
+                    )
+                return (
+                    "Please specify mapping_type: 'person' "
+                    "(only this exact email) or 'company' "
+                    "(all emails from @domain)."
+                )
+
+            # Case 3: target_folder + mapping_type provided
+            if mapping_type == "person":
+                identifier = sender
+            elif mapping_type == "company":
+                domain = sender.split("@")[-1] if "@" in sender else ""
+                if not domain:
+                    return "Cannot determine domain from sender address."
+                identifier = f"@{domain}"
+            else:
+                return (
+                    f"Invalid mapping_type '{mapping_type}'. "
+                    "Use 'person' or 'company'."
+                )
+
+            database.set_folder_mapping(
+                identifier, target_folder, mapping_type
+            )
+            return self._do_move(
+                client, email_id, target_folder, folder
+            )
         finally:
             client.disconnect()
 
