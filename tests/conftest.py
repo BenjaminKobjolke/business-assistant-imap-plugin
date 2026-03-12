@@ -71,6 +71,7 @@ class FakeEmailMessage:
         body_plain: str = "Hello, this is a test email.",
         body_html: str = "",
         attachments: list | None = None,
+        keywords: list | None = None,
     ):
         self.message_id = message_id
         self.from_address = from_address
@@ -79,6 +80,7 @@ class FakeEmailMessage:
         self._body_plain = body_plain
         self._body_html = body_html
         self.attachments = attachments or []
+        self.keywords = keywords or []
         self.raw_message = FakeRawMessage({
             "To": to_address,
             "From": from_address,
