@@ -24,14 +24,17 @@ def service(email_settings: object) -> EmailService:
 def _mock_client_with_email(
     from_address: str = "sender@example.com",
     email_id: str = "100",
+    message_id: str = "<test-123@example.com>",
 ) -> MagicMock:
     """Build a mock ImapClient that returns one email."""
     fake_msg = MagicMock()
     fake_msg.from_address = from_address
+    fake_msg.raw_message = {"Message-ID": message_id}
     mock_client = MagicMock()
     mock_client.get_message_by_id.return_value = (str(email_id), fake_msg)
     mock_client.move_to_folder.return_value = True
     mock_client.client.select_folder = MagicMock()
+    mock_client.client.search.return_value = [200]
     return mock_client
 
 
@@ -48,6 +51,7 @@ class TestMarkAsDoneKnownMapping:
         data = json.loads(result)
         assert data["status"] == "done"
         assert data["moved_to"] == "Clients/Sender"
+        assert data["new_email_id"] == "200"
         mock_client.move_to_folder.assert_called_once_with("100", "Clients/Sender")
 
     def test_company_mapping_moves_email(self, service: EmailService, db: Database) -> None:
@@ -238,6 +242,10 @@ class TestMarkAsDoneEdgeCases:
             folder="Work/Pending",
             include_attachments=False,
         )
-        mock_client.client.select_folder.assert_called_once_with("Work/Pending")
+        # select_folder called twice: source before move, destination for UID lookup
+        calls = mock_client.client.select_folder.call_args_list
+        assert calls[0].args == ("Work/Pending",)
+        assert calls[1].args == ("Archive/Done",)
         data = json.loads(result)
         assert data["moved_to"] == "Archive/Done"
+        assert data["new_email_id"] == "200"

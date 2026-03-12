@@ -317,6 +317,24 @@ dev = [
 ]
 
 [[package]]
+name = "business-assistant-filesystem-plugin"
+version = "0.1.0"
+source = { editable = "../business-assistant-filesystem-plugin" }
+dependencies = [
+    { name = "business-assistant-v2" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "business-assistant-v2", editable = "../business-assistant-v2" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.0.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "ruff", specifier = ">=0.4.0" },
+]
+
+[[package]]
 name = "business-assistant-imap-plugin"
 version = "0.1.0"
 source = { editable = "." }
@@ -446,6 +464,7 @@ source = { editable = "../business-assistant-v2" }
 dependencies = [
     { name = "bot-commander", extra = ["xmpp"] },
     { name = "business-assistant-calendar-plugin" },
+    { name = "business-assistant-filesystem-plugin" },
     { name = "business-assistant-imap-plugin" },
     { name = "business-assistant-obsidian-plugin" },
     { name = "business-assistant-project-management-plugin" },
@@ -459,6 +478,7 @@ dependencies = [
 requires-dist = [
     { name = "bot-commander", extras = ["xmpp"], editable = "../bot-commander" },
     { name = "business-assistant-calendar-plugin", editable = "../business-assistant-calendar-plugin" },
+    { name = "business-assistant-filesystem-plugin", editable = "../business-assistant-filesystem-plugin" },
     { name = "business-assistant-imap-plugin", editable = "." },
     { name = "business-assistant-obsidian-plugin", editable = "../business-assistant-obsidian-plugin" },
     { name = "business-assistant-project-management-plugin", editable = "../business-assistant-project-management-plugin" },

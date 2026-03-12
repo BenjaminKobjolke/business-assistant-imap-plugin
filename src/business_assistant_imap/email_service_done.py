@@ -51,6 +51,11 @@ class DoneMixin:
             if not sender:
                 return "Could not determine sender address."
 
+            # Extract Message-ID for post-move UID lookup
+            message_id_header = ""
+            if hasattr(email_msg, "raw_message") and email_msg.raw_message:
+                message_id_header = email_msg.raw_message.get("Message-ID", "")
+
             mapping = database.get_folder_mapping(sender)
 
             # Case 1: no target_folder provided
@@ -58,7 +63,8 @@ class DoneMixin:
                 if mapping:
                     # Known mapping → move
                     return self._do_move(
-                        client, email_id, mapping.folder, folder
+                        client, email_id, mapping.folder, folder,
+                        message_id_header,
                     )
                 return (
                     f"No target folder configured for {sender}. "
@@ -74,7 +80,8 @@ class DoneMixin:
                         mapping.identifier, target_folder, mapping.mapping_type
                     )
                     return self._do_move(
-                        client, email_id, target_folder, folder
+                        client, email_id, target_folder, folder,
+                        message_id_header,
                     )
                 return (
                     "Please specify mapping_type: 'person' "
@@ -100,7 +107,8 @@ class DoneMixin:
                 identifier, target_folder, mapping_type
             )
             return self._do_move(
-                client, email_id, target_folder, folder
+                client, email_id, target_folder, folder,
+                message_id_header,
             )
         finally:
             client.disconnect()
@@ -111,13 +119,29 @@ class DoneMixin:
         email_id: str,
         destination: str,
         source: str,
+        message_id_header: str = "",
     ) -> str:
-        """Move an email and return a success/failure message."""
+        """Move an email and return a success/failure message.
+
+        After a successful move, attempts to find the new UID in the
+        destination folder by searching for the Message-ID header.
+        """
         client.client.select_folder(source)
         success = client.move_to_folder(email_id, destination)
         if success:
-            return json.dumps({
-                "status": "done",
-                "moved_to": destination,
-            })
+            result: dict = {"status": "done", "moved_to": destination}
+            if message_id_header:
+                try:
+                    client.client.select_folder(destination)
+                    uids = client.client.search(
+                        ["HEADER", "Message-ID", message_id_header]
+                    )
+                    if uids:
+                        result["new_email_id"] = str(uids[-1])
+                except Exception:
+                    logger.debug(
+                        "Could not resolve new UID after move to %s",
+                        destination,
+                    )
+            return json.dumps(result)
         return f"Failed to move email to '{destination}'."
