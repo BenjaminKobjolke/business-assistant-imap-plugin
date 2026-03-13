@@ -470,6 +470,7 @@ dependencies = [
     { name = "business-assistant-project-management-plugin" },
     { name = "business-assistant-rtm-plugin" },
     { name = "business-assistant-transcribe-plugin" },
+    { name = "business-assistant-workingtimes-plugin" },
     { name = "pydantic-ai" },
     { name = "python-dotenv" },
 ]
@@ -484,6 +485,7 @@ requires-dist = [
     { name = "business-assistant-project-management-plugin", editable = "../business-assistant-project-management-plugin" },
     { name = "business-assistant-rtm-plugin", editable = "../business-assistant-rtm-plugin" },
     { name = "business-assistant-transcribe-plugin", editable = "../business-assistant-transcribe-plugin" },
+    { name = "business-assistant-workingtimes-plugin", editable = "../business-assistant-workingtimes-plugin" },
     { name = "pydantic-ai" },
     { name = "python-dotenv" },
 ]
@@ -492,6 +494,29 @@ requires-dist = [
 dev = [
     { name = "mypy", specifier = ">=1.0.0" },
     { name = "pytest", specifier = ">=8.0.0" },
+    { name = "ruff", specifier = ">=0.4.0" },
+]
+
+[[package]]
+name = "business-assistant-workingtimes-plugin"
+version = "0.1.0"
+source = { editable = "../business-assistant-workingtimes-plugin" }
+dependencies = [
+    { name = "business-assistant-v2" },
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "business-assistant-v2", editable = "../business-assistant-v2" },
+    { name = "httpx", specifier = ">=0.27.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.0.0" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "ruff", specifier = ">=0.4.0" },
 ]
 
