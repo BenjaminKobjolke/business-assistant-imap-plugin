@@ -65,7 +65,13 @@ class ComposeMixin:
         include_footer: bool = True,
     ) -> tuple[str, str, list]:
         """Build forward subject, HTML body, and attachments list."""
-        original_body = email_msg.get_body(MIME_TEXT_PLAIN) or ""
+        original_html = email_msg.get_body(MIME_TEXT_HTML)
+        if original_html:
+            original_body = original_html
+            is_html = True
+        else:
+            original_body = email_msg.get_body(MIME_TEXT_PLAIN) or ""
+            is_html = False
         original_from = email_msg.from_address or ""
         original_to = email_msg.raw_message.get("To", "")
         original_date = email_msg.date or ""
@@ -80,6 +86,7 @@ class ComposeMixin:
             original_subject=original_subject,
             original_body=original_body,
             footer_html=footer,
+            original_is_html=is_html,
         )
         subject = make_forward_subject(original_subject)
         attachments = email_msg.attachments or []

@@ -82,6 +82,31 @@ class TestAssembleForwardHtml:
         hr_pos = html.index("Forwarded message")
         assert footer_pos < hr_pos
 
+    def test_forward_preserves_html_body(self) -> None:
+        original_html = '<p style="color:red">Important</p><table><tr><td>data</td></tr></table>'
+        html = assemble_forward_html(
+            additional_message="FYI",
+            original_from="alice@example.com",
+            original_to="user@example.com",
+            original_date="Mon, 10 Mar 2026 10:00:00",
+            original_subject="Original Subject",
+            original_body=original_html,
+            original_is_html=True,
+        )
+        assert original_html in html
+        assert "Forwarded message" in html
+
+    def test_forward_plain_text_converts_newlines(self) -> None:
+        html = assemble_forward_html(
+            additional_message="",
+            original_from="alice@example.com",
+            original_to="user@example.com",
+            original_date="Mon, 10 Mar 2026",
+            original_subject="Test",
+            original_body="Line 1\nLine 2",
+        )
+        assert "Line 1<br>Line 2" in html
+
     def test_forward_without_footer(self) -> None:
         html = assemble_forward_html(
             additional_message="FYI",

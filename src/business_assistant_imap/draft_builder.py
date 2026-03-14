@@ -48,10 +48,11 @@ def assemble_forward_html(
     original_subject: str,
     original_body: str,
     footer_html: str = "",
+    original_is_html: bool = False,
 ) -> str:
     """Build HTML body for a forwarded email."""
     html_additional = additional_message.replace("\n", "<br>") if additional_message else ""
-    html_original = original_body.replace("\n", "<br>")
+    html_original = original_body if original_is_html else original_body.replace("\n", "<br>")
 
     additional_block = ""
     if html_additional:

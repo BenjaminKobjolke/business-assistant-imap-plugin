@@ -302,14 +302,14 @@ def _forward_email(
     to_addresses: list[str],
     additional_message: str = "",
     folder: str = "INBOX",
-    include_footer: bool = True,
+    include_footer: bool = False,
     action: str = "draft",
 ) -> str:
     """Forward an email. action: 'draft' saves to Drafts, 'send' sends via SMTP.
 
     Preserves all attachments and inline images.
     Use folder parameter if the email is not in INBOX.
-    Set include_footer=False to omit the HTML footer/signature.
+    Set include_footer=True to include the HTML footer/signature.
     """
     logger.info(
         "forward_email: email_id=%r to=%r action=%r folder=%r",

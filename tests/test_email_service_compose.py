@@ -478,6 +478,61 @@ class TestForwardEmail:
         assert "forwarded to bob@example.com" in result
 
 
+class TestForwardEmailHtmlBody:
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_forward_prefers_html_body(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """forward_email preserves HTML formatting from original."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        fake_msg = FakeEmailMessage(
+            message_id="95",
+            subject="HTML Email",
+            body_plain="Plain text fallback",
+            body_html='<p style="color:red">Rich HTML</p>',
+        )
+        mock_client.get_message_by_id.return_value = ("95", fake_msg)
+        mock_client.send_email.return_value = True
+        mock_client.save_draft.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        service.forward_email("95", ["bob@example.com"])
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        assert '<p style="color:red">Rich HTML</p>' in call_kwargs["body"]
+        assert "Plain text fallback" not in call_kwargs["body"]
+
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_forward_falls_back_to_plain_text(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """forward_email falls back to plain text when no HTML body."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        fake_msg = FakeEmailMessage(
+            message_id="96",
+            subject="Plain Email",
+            body_plain="Line 1\nLine 2",
+            body_html="",
+        )
+        mock_client.get_message_by_id.return_value = ("96", fake_msg)
+        mock_client.send_email.return_value = True
+        mock_client.save_draft.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        service.forward_email("96", ["bob@example.com"])
+
+        call_kwargs = mock_client.send_email.call_args[1]
+        assert "Line 1<br>Line 2" in call_kwargs["body"]
+
+
 class TestDraftForward:
     @patch("business_assistant_imap.email_service.ImapClient")
     def test_draft_forward_success(
