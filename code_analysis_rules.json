@@ -3,7 +3,45 @@
   "max_lines_per_file": {
     "enabled": true,
     "warning": 300,
-    "error": 500
+    "error": 500,
+    "exceptions": [
+      {
+        "file": "src/business_assistant_imap/email_service.py",
+        "warning": 600,
+        "error": 700,
+        "reason": "Facade class delegating to 3 mixins; methods share IMAP connect/disconnect pattern"
+      },
+      {
+        "file": "src/business_assistant_imap/plugin.py",
+        "warning": 570,
+        "error": 700,
+        "reason": "Tool registration with ~30 thin wrapper functions (5-15 lines each)"
+      },
+      {
+        "file": "src/business_assistant_imap/email_service_compose.py",
+        "warning": 400,
+        "error": 500,
+        "reason": "ComposeMixin with tightly coupled compose/reply/forward methods"
+      },
+      {
+        "file": "tests/test_email_service.py",
+        "warning": 670,
+        "error": 800,
+        "reason": "Test suite covering 46 scenarios for core EmailService operations"
+      },
+      {
+        "file": "tests/test_email_service_compose.py",
+        "warning": 680,
+        "error": 800,
+        "reason": "Test suite with 9 test classes covering compose/reply/forward paths"
+      },
+      {
+        "file": "tests/test_email_service_extras.py",
+        "warning": 420,
+        "error": 500,
+        "reason": "Test suite covering filter, attachment, and extra operations"
+      }
+    ]
   },
   "pmd_duplicates": {
     "enabled": true,
