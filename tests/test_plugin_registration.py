@@ -72,7 +72,7 @@ class TestPluginRegistration:
         registry = PluginRegistry()
         register(registry)
 
-        assert len(registry.all_tools()) == 29
+        assert len(registry.all_tools()) == 23
         assert len(registry.plugins) == 1
         assert registry.plugins[0].name == "imap"
         assert registry.system_prompt_extras() != ""

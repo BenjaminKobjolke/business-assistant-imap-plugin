@@ -52,17 +52,6 @@ def _get_service(ctx: RunContext[Deps]) -> EmailService:
     return ctx.deps.plugin_data[PLUGIN_DATA_EMAIL_SERVICE]
 
 
-def _list_inbox(
-    ctx: RunContext[Deps], limit: int = 20, unread_only: bool = False
-) -> str:
-    """List recent emails from the inbox. Default limit: 20.
-
-    Set unread_only=True to show only unread emails.
-    """
-    logger.info("list_inbox: limit=%d unread_only=%r", limit, unread_only)
-    return _get_service(ctx).list_inbox(limit=limit, unread_only=unread_only)
-
-
 def _list_messages(
     ctx: RunContext[Deps], folder: str = "INBOX", limit: int = 20,
     unread_only: bool = False,
@@ -277,41 +266,31 @@ def _send_rsvp(
     return _get_service(ctx).send_rsvp_for_email(email_id, status, folder)
 
 
-def _draft_reply(
+def _reply_email(
     ctx: RunContext[Deps],
     email_id: str,
     reply_body: str,
     greeting: str = "",
     folder: str = "INBOX",
     include_footer: bool = True,
+    action: str = "draft",
 ) -> str:
-    """Save a reply draft to an email in the Drafts folder.
+    """Reply to an email. action: 'draft' saves to Drafts, 'send' sends via SMTP.
 
     Use folder parameter if the email is not in INBOX.
     Set include_footer=False to omit the HTML footer/signature.
     """
-    logger.info("draft_reply: email_id=%r folder=%r", email_id, folder)
-    return _get_service(ctx).draft_reply(
-        email_id, reply_body, greeting, folder,
-        include_footer=include_footer,
+    logger.info(
+        "reply_email: email_id=%r action=%r folder=%r",
+        email_id, action, folder,
     )
-
-
-def _send_reply(
-    ctx: RunContext[Deps],
-    email_id: str,
-    reply_body: str,
-    greeting: str = "",
-    folder: str = "INBOX",
-    include_footer: bool = True,
-) -> str:
-    """Send a reply to an email directly via SMTP.
-
-    Use folder parameter if the email is not in INBOX.
-    Set include_footer=False to omit the HTML footer/signature.
-    """
-    logger.info("send_reply: email_id=%r folder=%r", email_id, folder)
-    return _get_service(ctx).send_reply(
+    svc = _get_service(ctx)
+    if action == "send":
+        return svc.send_reply(
+            email_id, reply_body, greeting, folder,
+            include_footer=include_footer,
+        )
+    return svc.draft_reply(
         email_id, reply_body, greeting, folder,
         include_footer=include_footer,
     )
@@ -324,39 +303,26 @@ def _forward_email(
     additional_message: str = "",
     folder: str = "INBOX",
     include_footer: bool = True,
+    action: str = "draft",
 ) -> str:
-    """Forward an email to one or more recipients, preserving all attachments and inline images.
+    """Forward an email. action: 'draft' saves to Drafts, 'send' sends via SMTP.
 
-    Use folder parameter if the email is not in INBOX (e.g., folder="Sent").
+    Preserves all attachments and inline images.
+    Use folder parameter if the email is not in INBOX.
     Set include_footer=False to omit the HTML footer/signature.
     """
     logger.info(
-        "forward_email: email_id=%r to=%r folder=%r", email_id, to_addresses, folder
+        "forward_email: email_id=%r to=%r action=%r folder=%r",
+        email_id, to_addresses, action, folder,
     )
-    return _get_service(ctx).forward_email(
-        email_id, to_addresses, additional_message, folder,
-        include_footer=include_footer,
-    )
-
-
-def _draft_forward(
-    ctx: RunContext[Deps],
-    email_id: str,
-    to_address: str,
-    additional_message: str = "",
-    folder: str = "INBOX",
-    include_footer: bool = True,
-) -> str:
-    """Save a forward draft preserving all attachments and inline images.
-
-    Use folder parameter if the email is not in INBOX (e.g., folder="Sent").
-    Set include_footer=False to omit the HTML footer/signature.
-    """
-    logger.info(
-        "draft_forward: email_id=%r to=%r folder=%r", email_id, to_address, folder
-    )
-    return _get_service(ctx).draft_forward(
-        email_id, to_address, additional_message, folder,
+    svc = _get_service(ctx)
+    if action == "send":
+        return svc.forward_email(
+            email_id, to_addresses, additional_message, folder,
+            include_footer=include_footer,
+        )
+    return svc.draft_forward(
+        email_id, to_addresses[0], additional_message, folder,
         include_footer=include_footer,
     )
 
@@ -369,44 +335,26 @@ def _compose_email(
     bcc_addresses: list[str] | None = None,
     content_type: str = "text/html",
     include_footer: bool = True,
+    action: str = "draft",
 ) -> str:
-    """Send a new composed email via SMTP with optional BCC.
+    """Compose a new email. action: 'draft' saves to Drafts, 'send' sends via SMTP.
 
-    Use for composing brand new emails (not replies or forwards).
     Set include_footer=False to omit the HTML footer/signature.
     """
-    logger.info("compose_email: to=%r subject=%r", to_addresses, subject)
-    return _get_service(ctx).compose_email(
-        to_addresses=to_addresses,
-        subject=subject,
-        body=body,
-        bcc_addresses=bcc_addresses,
-        content_type=content_type,
-        include_footer=include_footer,
+    logger.info(
+        "compose_email: to=%r subject=%r action=%r",
+        to_addresses, subject, action,
     )
-
-
-def _draft_compose(
-    ctx: RunContext[Deps],
-    to_addresses: list[str],
-    subject: str,
-    body: str,
-    bcc_addresses: list[str] | None = None,
-    content_type: str = "text/html",
-    include_footer: bool = True,
-) -> str:
-    """Save a new composed email as draft with optional BCC.
-
-    Use for composing brand new email drafts (not reply or forward drafts).
-    Set include_footer=False to omit the HTML footer/signature.
-    """
-    logger.info("draft_compose: to=%r subject=%r", to_addresses, subject)
-    return _get_service(ctx).draft_compose(
-        to_addresses=to_addresses,
-        subject=subject,
-        body=body,
-        bcc_addresses=bcc_addresses,
-        content_type=content_type,
+    svc = _get_service(ctx)
+    if action == "send":
+        return svc.compose_email(
+            to_addresses=to_addresses, subject=subject, body=body,
+            bcc_addresses=bcc_addresses, content_type=content_type,
+            include_footer=include_footer,
+        )
+    return svc.draft_compose(
+        to_addresses=to_addresses, subject=subject, body=body,
+        bcc_addresses=bcc_addresses, content_type=content_type,
         include_footer=include_footer,
     )
 
@@ -433,37 +381,24 @@ def _build_greeting(
     return build_greeting(salutation, skip, formal=formal)
 
 
-def _get_email_tags(
-    ctx: RunContext[Deps], email_id: str, folder: str = "INBOX"
+def _email_tags(
+    ctx: RunContext[Deps], email_id: str, action: str = "list",
+    tag: str = "", folder: str = "INBOX",
 ) -> str:
-    """Get all tags/keywords on a specific email.
+    """Manage email tags. action: list, add, remove.
 
     Use folder parameter if the email is not in INBOX.
     """
-    logger.info("get_email_tags: email_id=%r folder=%r", email_id, folder)
-    return _get_service(ctx).get_email_tags(email_id, folder)
-
-
-def _add_email_tag(
-    ctx: RunContext[Deps], email_id: str, tag: str, folder: str = "INBOX"
-) -> str:
-    """Add a tag/keyword to an email.
-
-    Use folder parameter if the email is not in INBOX.
-    """
-    logger.info("add_email_tag: email_id=%r tag=%r folder=%r", email_id, tag, folder)
-    return _get_service(ctx).add_email_tag(email_id, tag, folder)
-
-
-def _remove_email_tag(
-    ctx: RunContext[Deps], email_id: str, tag: str, folder: str = "INBOX"
-) -> str:
-    """Remove a tag/keyword from an email.
-
-    Use folder parameter if the email is not in INBOX.
-    """
-    logger.info("remove_email_tag: email_id=%r tag=%r folder=%r", email_id, tag, folder)
-    return _get_service(ctx).remove_email_tag(email_id, tag, folder)
+    logger.info(
+        "email_tags: email_id=%r action=%r tag=%r folder=%r",
+        email_id, action, tag, folder,
+    )
+    svc = _get_service(ctx)
+    if action == "add":
+        return svc.add_email_tag(email_id, tag, folder)
+    if action == "remove":
+        return svc.remove_email_tag(email_id, tag, folder)
+    return svc.get_email_tags(email_id, folder)
 
 
 def _get_database(ctx: RunContext[Deps]) -> Database:
@@ -518,7 +453,6 @@ def register(registry: PluginRegistry) -> None:
     database = Database(db_settings.db_path)
 
     tools = [
-        Tool(_list_inbox, name="list_inbox"),
         Tool(_list_messages, name="list_messages"),
         Tool(_show_email, name="show_email"),
         Tool(_get_attachment_url, name="get_attachment_url"),
@@ -535,18 +469,13 @@ def register(registry: PluginRegistry) -> None:
         Tool(_get_meeting_links, name="get_meeting_links"),
         Tool(_detect_invite, name="detect_invite"),
         Tool(_send_rsvp, name="send_rsvp"),
-        Tool(_draft_reply, name="draft_reply"),
-        Tool(_send_reply, name="send_reply"),
+        Tool(_reply_email, name="reply_email"),
         Tool(_forward_email, name="forward_email"),
-        Tool(_draft_forward, name="draft_forward"),
         Tool(_compose_email, name="compose_email"),
-        Tool(_draft_compose, name="draft_compose"),
         Tool(_search_sent_to, name="search_sent_to"),
         Tool(_build_greeting, name="build_greeting"),
         Tool(_mark_email_as_done, name="mark_email_as_done"),
-        Tool(_get_email_tags, name="get_email_tags"),
-        Tool(_add_email_tag, name="add_email_tag"),
-        Tool(_remove_email_tag, name="remove_email_tag"),
+        Tool(_email_tags, name="email_tags"),
     ]
 
     info = PluginInfo(
