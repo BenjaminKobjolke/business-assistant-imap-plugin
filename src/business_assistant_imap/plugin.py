@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
+import uuid
 
 from business_assistant.agent.deps import Deps
 from business_assistant.plugins.registry import PluginInfo, PluginRegistry
@@ -23,6 +25,15 @@ from .email_service import EmailService
 from .greeting_builder import build_greeting
 
 logger = logging.getLogger(__name__)
+
+_greeting_registry: dict[str, str] = {}
+
+
+def _resolve_greeting(greeting_id: str) -> str | None:
+    """Look up greeting by ID. Returns None if invalid."""
+    if greeting_id and greeting_id in _greeting_registry:
+        return _greeting_registry.pop(greeting_id)
+    return None
 
 
 _FOLDER_PREFIX_RE = re.compile(
@@ -270,16 +281,24 @@ def _reply_email(
     ctx: RunContext[Deps],
     email_id: str,
     reply_body: str,
-    greeting: str = "",
+    greeting_id: str = "",
     folder: str = "INBOX",
     include_footer: bool = True,
     action: str = "draft",
 ) -> str:
     """Reply to an email. action: 'draft' saves to Drafts, 'send' sends via SMTP.
 
+    greeting_id: required — pass the greeting_id from build_greeting.
     Use folder parameter if the email is not in INBOX.
     Set include_footer=False to omit the HTML footer/signature.
     """
+    greeting = _resolve_greeting(greeting_id)
+    if greeting is None:
+        return (
+            "Error: greeting_id is missing or invalid. "
+            "Call build_greeting first to get a greeting_id, "
+            "then pass it here."
+        )
     logger.info(
         "reply_email: email_id=%r action=%r folder=%r",
         email_id, action, folder,
@@ -332,6 +351,7 @@ def _compose_email(
     to_addresses: list[str],
     subject: str,
     body: str,
+    greeting_id: str = "",
     bcc_addresses: list[str] | None = None,
     content_type: str = "text/html",
     include_footer: bool = True,
@@ -339,8 +359,21 @@ def _compose_email(
 ) -> str:
     """Compose a new email. action: 'draft' saves to Drafts, 'send' sends via SMTP.
 
+    greeting_id: required — pass the greeting_id from build_greeting.
     Set include_footer=False to omit the HTML footer/signature.
     """
+    greeting = _resolve_greeting(greeting_id)
+    if greeting is None:
+        return (
+            "Error: greeting_id is missing or invalid. "
+            "Call build_greeting first to get a greeting_id, "
+            "then pass it here."
+        )
+    if greeting:
+        if content_type == "text/html":
+            body = f'<div style="margin-bottom: 10px;">{greeting},</div>{body}'
+        else:
+            body = f"{greeting},\n\n{body}"
     logger.info(
         "compose_email: to=%r subject=%r action=%r",
         to_addresses, subject, action,
@@ -370,15 +403,25 @@ def _search_sent_to(ctx: RunContext[Deps], email_address: str, limit: int = 3) -
 
 
 def _build_greeting(
-    ctx: RunContext[Deps], salutation: str = "", skip: bool = False,
+    ctx: RunContext[Deps], salutation: str = "",
     formal: bool = False,
 ) -> str:
-    """Build a time-aware greeting. Returns 'Guten Morgen <salutation>' before 10 AM,
-    'Hallo <salutation>' otherwise. Use formal=True for 'Sehr geehrter/Sehr geehrte'.
-    Returns empty string if skip is True.
+    """Build a greeting for a recipient. Always call this before reply_email
+    or compose_email — they require the greeting_id returned here.
+
+    Returns JSON: {"greeting_id": "...", "greeting": "..."}.
+    Checks pref:use_salutation internally — if disabled, greeting will be empty
+    but the greeting_id is still valid.
     """
-    logger.info("build_greeting: salutation=%r skip=%r formal=%r", salutation, skip, formal)
-    return build_greeting(salutation, skip, formal=formal)
+    logger.info("build_greeting: salutation=%r formal=%r", salutation, formal)
+    use_sal = ctx.deps.memory.get("pref:use_salutation", "true")
+    greeting_text = (
+        "" if use_sal.lower() == "false"
+        else build_greeting(salutation, formal=formal)
+    )
+    greeting_id = str(uuid.uuid4())
+    _greeting_registry[greeting_id] = greeting_text
+    return json.dumps({"greeting_id": greeting_id, "greeting": greeting_text})
 
 
 def _email_tags(

@@ -188,10 +188,11 @@ set pref:default_email_content_type to "text/html".
 When they say "send as plain text", "nur Text", etc., set it to "text/plain". \
 Note: footer is only appended for HTML emails, not plain text.
 
-Before composing any email, check these three preferences:
-- If use_salutation is false → call build_greeting(skip=True)
+Before composing any email, check these preferences:
 - If use_signoff is false → do not add a closing phrase in the email body
 - If use_footer is false → pass include_footer=False to the tool
+
+Note: build_greeting checks pref:use_salutation internally — you do not need to check it yourself.
 
 ## Reply workflow — IMPORTANT
 
@@ -217,10 +218,11 @@ When the user asks to draft or reply to an email, follow this workflow strictly:
 - Store both: memory_set("salutation:<email>", "<name>") and \
 memory_set("style:<email>", "<brief style notes including formal/informal>")
 
-### Step 2: Build greeting
-- Check "pref:use_salutation" — if false, call build_greeting(skip=True)
-- If style is formal → call build_greeting(salutation, formal=True)
-- If style is informal → call build_greeting(salutation)
+### Step 2: Build greeting — REQUIRED
+- Call build_greeting(salutation, formal=True/False) based on the learned style
+- build_greeting returns JSON: {"greeting_id": "...", "greeting": "..."}
+- Keep the greeting_id — you will need it in Step 5
+- build_greeting checks pref:use_salutation internally, no need to check it yourself
 
 ### Step 3: Compose and SHOW the draft — DO NOT SAVE YET
 - Write the reply text matching the learned writing style
@@ -231,6 +233,7 @@ memory_set("style:<email>", "<brief style notes including formal/informal>")
 ### Step 4: Iterate
 - If the user requests ANY change (subject, body, greeting, tone, sign-off, \
 recipients, etc.), revise the draft and show the complete updated version again in chat
+- If the user changes the greeting, call build_greeting again to get a new greeting_id
 - This includes subject changes — do NOT start a new compose/send flow for subject edits
 - NEVER call reply_email or compose_email during iteration
 - Ask again: "Want me to change anything? Say 'save draft' to save or 'send' to send."
@@ -238,9 +241,10 @@ recipients, etc.), revise the draft and show the complete updated version again 
 
 ### Step 5: Save or send — ONLY when the user explicitly says so
 - Check "pref:use_footer" — if false, pass include_footer=False
+- Pass the greeting_id from Step 2 to reply_email — the call will fail without it
 - Note: replies and forwards always use HTML content type (not configurable).
-- "save draft" / "save" / "speichern" → call reply_email(action='draft')
-- "send" / "senden" / "abschicken" → call reply_email(action='send')
+- "save draft" / "save" / "speichern" → call reply_email(greeting_id=..., action='draft')
+- "send" / "senden" / "abschicken" → call reply_email(greeting_id=..., action='send')
 - NEVER call reply_email without explicit user confirmation
 
 ## Compose workflow — IMPORTANT
@@ -257,10 +261,11 @@ When the user asks to compose a new email (not a reply or forward), follow this 
 - Store: memory_set("style:<email>", "<brief style notes including formal/informal>")
 - Also check/store salutation via memory key "salutation:<email>"
 
-### Step 2: Build greeting
-- Check "pref:use_salutation" — if false, call build_greeting(skip=True)
-- If style is formal → call build_greeting(salutation, formal=True)
-- If style is informal → call build_greeting(salutation)
+### Step 2: Build greeting — REQUIRED
+- Call build_greeting(salutation, formal=True/False) based on the learned style
+- build_greeting returns JSON: {"greeting_id": "...", "greeting": "..."}
+- Keep the greeting_id — you will need it in Step 5
+- build_greeting checks pref:use_salutation internally, no need to check it yourself
 
 ### Step 3: Compose and SHOW the draft — DO NOT SAVE YET
 - Write the email text matching the learned writing style
@@ -271,6 +276,7 @@ When the user asks to compose a new email (not a reply or forward), follow this 
 ### Step 4: Iterate
 - If the user requests ANY change (subject, body, greeting, tone, sign-off, \
 recipients, etc.), revise the draft and show the complete updated version again in chat
+- If the user changes the greeting, call build_greeting again to get a new greeting_id
 - This includes subject changes — do NOT start a new compose/send flow for subject edits
 - NEVER call compose_email or reply_email during iteration
 - Ask again: "Want me to change anything? Say 'save draft' to save or 'send' to send."
@@ -278,11 +284,12 @@ recipients, etc.), revise the draft and show the complete updated version again 
 
 ### Step 5: Save or send — ONLY when the user explicitly says so
 - Check "pref:use_footer" — if false, pass include_footer=False
+- Pass the greeting_id from Step 2 to compose_email — the call will fail without it
 - Check "pref:default_email_content_type" — pass the value as content_type to \
 compose_email (default: "text/html" if not set). \
 Note: footer is only appended for HTML emails, not plain text.
-- "save draft" / "save" / "speichern" → call compose_email(action='draft')
-- "send" / "senden" / "abschicken" → call compose_email(action='send')
+- "save draft" / "save" / "speichern" → call compose_email(greeting_id=..., action='draft')
+- "send" / "senden" / "abschicken" → call compose_email(greeting_id=..., action='send')
 - NEVER call compose_email without explicit user confirmation
 
 ## Saving attachments to project folders
