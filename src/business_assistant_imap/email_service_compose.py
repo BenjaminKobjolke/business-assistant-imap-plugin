@@ -348,6 +348,62 @@ class ComposeMixin:
         finally:
             client.disconnect()
 
+    def edit_draft(
+        self,
+        email_id: str,
+        subject: str = "",
+        body: str = "",
+        to_addresses: list[str] | None = None,
+    ) -> str:
+        """Edit a draft by replacing it with a new one.
+
+        Only non-empty parameters override the original values.
+        Internally: fetches original, trashes it, creates new draft.
+        """
+        client = self._create_client()
+        try:
+            result = client.get_message_by_id(
+                email_id, folder="Drafts",
+                include_attachments=False,
+            )
+            if result is None:
+                return "Draft not found in Drafts folder."
+            msg_id, email_msg = result
+
+            orig_to = email_msg.raw_message.get("To", "")
+            orig_subject = email_msg.subject or ""
+            orig_body = (
+                email_msg.get_body(MIME_TEXT_HTML)
+                or email_msg.get_body(MIME_TEXT_PLAIN)
+                or ""
+            )
+            orig_bcc = email_msg.raw_message.get("Bcc", "")
+
+            new_subject = subject if subject else orig_subject
+            new_body = body if body else orig_body
+            new_to = (
+                to_addresses if to_addresses
+                else [a.strip() for a in orig_to.split(",") if a.strip()]
+            )
+            bcc_list = (
+                [a.strip() for a in orig_bcc.split(",") if a.strip()]
+                or None
+            )
+        finally:
+            client.disconnect()
+
+        # Trash old draft
+        self.move_email(email_id, "Trash", source_folder="Drafts")
+
+        # Create new draft
+        return self.draft_compose(
+            to_addresses=new_to,
+            subject=new_subject,
+            body=new_body,
+            bcc_addresses=bcc_list,
+            include_footer=False,
+        )
+
     def search_sent_to(self, email_address: str, limit: int = 3) -> str:
         """Search the Sent folder for recent emails to a specific address.
 

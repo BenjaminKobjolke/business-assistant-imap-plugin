@@ -392,6 +392,30 @@ def _compose_email(
     )
 
 
+def _edit_draft(
+    ctx: RunContext[Deps],
+    email_id: str,
+    subject: str = "",
+    body: str = "",
+    to_addresses: list[str] | None = None,
+) -> str:
+    """Edit a draft email. Only non-empty parameters override the original values.
+
+    Internally replaces the draft (IMAP does not support in-place editing).
+    Use this to change subject, body, or recipients of an existing draft.
+    """
+    logger.info(
+        "edit_draft: email_id=%r subject=%r",
+        email_id, subject[:50] if subject else "",
+    )
+    return _get_service(ctx).edit_draft(
+        email_id=email_id,
+        subject=subject,
+        body=body,
+        to_addresses=to_addresses,
+    )
+
+
 def _search_sent_to(ctx: RunContext[Deps], email_address: str, limit: int = 3) -> str:
     """Search the Sent folder for recent emails to a specific address.
 
@@ -455,16 +479,20 @@ def _mark_email_as_done(
     target_folder: str = "",
     mapping_type: str = "",
     folder: str = "INBOX",
+    confirm: bool = False,
 ) -> str:
     """Mark an email as done by moving it to a learned folder.
 
-    On first use for a sender, provide target_folder and mapping_type
+    On first use for a sender, provide target_folder, mapping_type, and confirm=True.
     ('person' for exact email, 'company' for all @domain).
     After that, just provide email_id — the folder is remembered.
+    confirm=True is required when creating a NEW mapping (first time for a sender).
+    Confirm with the user which folder to use before setting confirm=True.
     """
     logger.info(
-        "mark_email_as_done: email_id=%r target_folder=%r mapping_type=%r folder=%r",
-        email_id, target_folder, mapping_type, folder,
+        "mark_email_as_done: email_id=%r target_folder=%r mapping_type=%r "
+        "folder=%r confirm=%r",
+        email_id, target_folder, mapping_type, folder, confirm,
     )
     return _get_service(ctx).mark_as_done(
         email_id=email_id,
@@ -472,7 +500,42 @@ def _mark_email_as_done(
         target_folder=target_folder,
         mapping_type=mapping_type,
         folder=folder,
+        confirm=confirm,
     )
+
+
+def _set_folder_rule(
+    ctx: RunContext[Deps],
+    email_address: str,
+    target_folder: str,
+    mapping_type: str = "person",
+) -> str:
+    """Create or update a sender→folder routing rule without moving an email.
+
+    mapping_type: 'person' (exact email) or 'company' (all @domain).
+    Future mark_email_as_done calls for this sender will auto-move to target_folder.
+    """
+    logger.info(
+        "set_folder_rule: email=%r folder=%r type=%r",
+        email_address, target_folder, mapping_type,
+    )
+    db = _get_database(ctx)
+    if mapping_type == "company":
+        domain = email_address.split("@")[-1] if "@" in email_address else ""
+        if not domain:
+            return "Cannot determine domain from email address."
+        identifier = f"@{domain}"
+    elif mapping_type == "person":
+        identifier = email_address.lower()
+    else:
+        return f"Invalid mapping_type '{mapping_type}'. Use 'person' or 'company'."
+    db.set_folder_mapping(identifier, target_folder, mapping_type)
+    return json.dumps({
+        "status": "created",
+        "mapping_type": mapping_type,
+        "identifier": identifier,
+        "target_folder": target_folder,
+    })
 
 
 def register(registry: PluginRegistry) -> None:
@@ -515,9 +578,11 @@ def register(registry: PluginRegistry) -> None:
         Tool(_reply_email, name="reply_email"),
         Tool(_forward_email, name="forward_email"),
         Tool(_compose_email, name="compose_email"),
+        Tool(_edit_draft, name="edit_draft"),
         Tool(_search_sent_to, name="search_sent_to"),
         Tool(_build_greeting, name="build_greeting"),
         Tool(_mark_email_as_done, name="mark_email_as_done"),
+        Tool(_set_folder_rule, name="set_folder_rule"),
         Tool(_email_tags, name="email_tags"),
     ]
 
