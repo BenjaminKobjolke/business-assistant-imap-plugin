@@ -23,6 +23,7 @@ from .constants import (
     FOLDER_NOT_FOUND,
     FOLDER_NOT_FOUND_NO_SUGGESTIONS,
     MAX_FOLDER_SUGGESTIONS,
+    MIME_TEXT_HTML,
     MIME_TEXT_PLAIN,
 )
 from .email_service_compose import ComposeMixin, _extract_reply_address
@@ -200,6 +201,21 @@ class EmailService(MeetingMixin, ComposeMixin, DoneMixin):
                 "attachments": att_info,
                 "tags": email_msg.keywords,
             })
+        finally:
+            client.disconnect()
+
+    def get_html_body(self, email_id: str, folder: str = "INBOX") -> str:
+        """Return the HTML body of an email, or empty string if not available."""
+        client = self._create_client()
+        try:
+            result = client.get_message_by_id(
+                email_id, folder=folder,
+                include_attachments=False,
+            )
+            if result is None:
+                return ""
+            msg_id, email_msg = result
+            return email_msg.get_body(MIME_TEXT_HTML) or ""
         finally:
             client.disconnect()
 
