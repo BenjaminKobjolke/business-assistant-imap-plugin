@@ -133,6 +133,7 @@ class TestMarkAsDoneWithTargetFolderAndType:
                 database=db,
                 target_folder="Clients/Acme",
                 mapping_type="person",
+                confirm=True,
             )
 
         data = json.loads(result)
@@ -155,6 +156,7 @@ class TestMarkAsDoneWithTargetFolderAndType:
                 database=db,
                 target_folder="Company/Siemens",
                 mapping_type="company",
+                confirm=True,
             )
 
         data = json.loads(result)
@@ -175,6 +177,7 @@ class TestMarkAsDoneWithTargetFolderAndType:
                 database=db,
                 target_folder="Clients/X",
                 mapping_type="invalid",
+                confirm=True,
             )
 
         assert "Invalid mapping_type" in result
@@ -249,3 +252,61 @@ class TestMarkAsDoneEdgeCases:
         data = json.loads(result)
         assert data["moved_to"] == "Archive/Done"
         assert data["new_email_id"] == "200"
+
+
+class TestMarkAsDoneConfirmGate:
+    """New mapping creation requires confirm=True."""
+
+    def test_new_mapping_without_confirm_rejected(
+        self, service: EmailService, db: Database
+    ) -> None:
+        mock_client = _mock_client_with_email(from_address="new@example.com")
+
+        with patch.object(service, "_create_client", return_value=mock_client):
+            result = service.mark_as_done(
+                "100",
+                database=db,
+                target_folder="Archive/New",
+                mapping_type="person",
+            )
+
+        assert "No existing rule" in result
+        assert "confirm" in result.lower()
+        assert db.get_folder_mapping("new@example.com") is None
+
+    def test_new_mapping_with_confirm_succeeds(
+        self, service: EmailService, db: Database
+    ) -> None:
+        mock_client = _mock_client_with_email(from_address="new@example.com")
+
+        with patch.object(service, "_create_client", return_value=mock_client):
+            result = service.mark_as_done(
+                "100",
+                database=db,
+                target_folder="Archive/New",
+                mapping_type="person",
+                confirm=True,
+            )
+
+        data = json.loads(result)
+        assert data["status"] == "done"
+        assert db.get_folder_mapping("new@example.com") is not None
+
+    def test_existing_mapping_update_no_confirm_needed(
+        self, service: EmailService, db: Database
+    ) -> None:
+        """Updating an existing mapping does not require confirm."""
+        db.set_folder_mapping("sender@example.com", "Old/Folder", "person")
+        mock_client = _mock_client_with_email()
+
+        with patch.object(service, "_create_client", return_value=mock_client):
+            result = service.mark_as_done(
+                "100",
+                database=db,
+                target_folder="New/Folder",
+                mapping_type="person",
+            )
+
+        data = json.loads(result)
+        assert data["status"] == "done"
+        assert data["moved_to"] == "New/Folder"

@@ -31,11 +31,13 @@ class DoneMixin:
         target_folder: str = "",
         mapping_type: str = "",
         folder: str = "INBOX",
+        confirm: bool = False,
     ) -> str:
         """Mark an email as done by moving it to a mapped folder.
 
         Looks up the sender in the database to find the target folder.
-        If no mapping exists the caller must supply target_folder and mapping_type.
+        If no mapping exists the caller must supply target_folder, mapping_type,
+        and confirm=True (to prevent accidental wrong folder selection).
         """
         client = self._create_client()
         try:
@@ -101,6 +103,16 @@ class DoneMixin:
                 return (
                     f"Invalid mapping_type '{mapping_type}'. "
                     "Use 'person' or 'company'."
+                )
+
+            # New mapping requires confirm=True to prevent wrong folder
+            if not mapping and not confirm:
+                return (
+                    f"No existing rule for {sender}. "
+                    f"Please confirm: create '{mapping_type}' rule "
+                    f"'{identifier}' -> '{target_folder}'? "
+                    "Verify the folder with the user, then call again "
+                    "with confirm=True."
                 )
 
             database.set_folder_mapping(
