@@ -23,6 +23,7 @@ from .constants import (
 from .database import Database
 from .email_service import EmailService
 from .greeting_builder import build_greeting
+from .send_later import calculate_next_send_time
 
 logger = logging.getLogger(__name__)
 
@@ -426,6 +427,28 @@ def _search_sent_to(ctx: RunContext[Deps], email_address: str, limit: int = 3) -
     return _get_service(ctx).search_sent_to(email_address, limit)
 
 
+def _get_send_later_reference_hour(ctx: RunContext[Deps]) -> int | None:
+    """Return the scheduled send hour if Send Later is active, else None."""
+    try:
+        service = _get_service(ctx)
+        settings = service._settings
+        if not settings.send_later_enabled:
+            return None
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo(settings.timezone)
+        now = datetime.now(tz)
+        send_time = calculate_next_send_time(
+            now, settings.send_later_start_hour, settings.send_later_end_hour,
+        )
+        if send_time is not None:
+            return send_time.hour
+    except Exception:
+        pass
+    return None
+
+
 def _build_greeting(
     ctx: RunContext[Deps], salutation: str = "",
     formal: bool = False,
@@ -439,9 +462,10 @@ def _build_greeting(
     """
     logger.info("build_greeting: salutation=%r formal=%r", salutation, formal)
     use_sal = ctx.deps.memory.get("pref:use_salutation", "true")
+    reference_hour = _get_send_later_reference_hour(ctx)
     greeting_text = (
         "" if use_sal.lower() == "false"
-        else build_greeting(salutation, formal=formal)
+        else build_greeting(salutation, formal=formal, reference_hour=reference_hour)
     )
     greeting_id = str(uuid.uuid4())
     _greeting_registry[greeting_id] = greeting_text

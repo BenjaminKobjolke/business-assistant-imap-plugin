@@ -136,6 +136,7 @@ def save_draft_to_imap(
     html_body: str,
     from_email: str,
     draft_folder: str = "Drafts",
+    custom_headers: dict[str, str] | None = None,
 ) -> bool:
     """Save the assembled email as a draft via IMAP client.
 
@@ -146,16 +147,20 @@ def save_draft_to_imap(
         html_body: HTML body content.
         from_email: Sender email address.
         draft_folder: IMAP folder name for drafts.
+        custom_headers: Optional extra MIME headers (e.g. Send Later).
     """
     try:
-        success = client.save_draft(
-            to_addresses=[to_address],
-            subject=subject,
-            body=html_body,
-            from_email=from_email,
-            draft_folder=draft_folder,
-            content_type=MIME_TEXT_HTML,
-        )
+        kwargs: dict = {
+            "to_addresses": [to_address],
+            "subject": subject,
+            "body": html_body,
+            "from_email": from_email,
+            "draft_folder": draft_folder,
+            "content_type": MIME_TEXT_HTML,
+        }
+        if custom_headers:
+            kwargs["custom_headers"] = custom_headers
+        success = client.save_draft(**kwargs)
         if success:
             logger.info("Draft reply saved for %s: %s", to_address, subject)
         else:

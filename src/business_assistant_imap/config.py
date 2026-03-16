@@ -10,7 +10,10 @@ from .constants import (
     DEFAULT_DB_PATH,
     DEFAULT_EMAIL_FOOTER_PATH,
     DEFAULT_IMAP_PORT,
+    DEFAULT_SEND_LATER_END_HOUR,
+    DEFAULT_SEND_LATER_START_HOUR,
     DEFAULT_SMTP_PORT,
+    DEFAULT_USER_TIMEZONE,
     ENV_ASSISTANT_DB_PATH,
     ENV_EMAIL_FOOTER_PATH,
     ENV_EMAIL_FROM_ADDRESS,
@@ -19,10 +22,14 @@ from .constants import (
     ENV_IMAP_SERVER,
     ENV_IMAP_USE_SSL,
     ENV_IMAP_USERNAME,
+    ENV_SEND_LATER_ENABLED,
+    ENV_SEND_LATER_END_HOUR,
+    ENV_SEND_LATER_START_HOUR,
     ENV_SMTP_PASSWORD,
     ENV_SMTP_PORT,
     ENV_SMTP_SERVER,
     ENV_SMTP_USERNAME,
+    ENV_USER_TIMEZONE,
 )
 
 
@@ -62,6 +69,10 @@ class EmailSettings:
     smtp: SmtpSettings
     from_address: str
     footer_html: str = ""
+    send_later_enabled: bool = True
+    send_later_start_hour: int = DEFAULT_SEND_LATER_START_HOUR
+    send_later_end_hour: int = DEFAULT_SEND_LATER_END_HOUR
+    timezone: str = DEFAULT_USER_TIMEZONE
 
 
 def load_email_settings() -> EmailSettings | None:
@@ -102,7 +113,27 @@ def load_email_settings() -> EmailSettings | None:
     if footer_path.is_file():
         footer_html = footer_path.read_text(encoding="utf-8")
 
-    return EmailSettings(imap=imap, smtp=smtp, from_address=from_address, footer_html=footer_html)
+    send_later_enabled = os.environ.get(
+        ENV_SEND_LATER_ENABLED, "true",
+    ).lower() == "true"
+    send_later_start = int(os.environ.get(
+        ENV_SEND_LATER_START_HOUR, str(DEFAULT_SEND_LATER_START_HOUR),
+    ))
+    send_later_end = int(os.environ.get(
+        ENV_SEND_LATER_END_HOUR, str(DEFAULT_SEND_LATER_END_HOUR),
+    ))
+    timezone = os.environ.get(ENV_USER_TIMEZONE, DEFAULT_USER_TIMEZONE)
+
+    return EmailSettings(
+        imap=imap,
+        smtp=smtp,
+        from_address=from_address,
+        footer_html=footer_html,
+        send_later_enabled=send_later_enabled,
+        send_later_start_hour=send_later_start,
+        send_later_end_hour=send_later_end,
+        timezone=timezone,
+    )
 
 
 def load_database_settings() -> DatabaseSettings:

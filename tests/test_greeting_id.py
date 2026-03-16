@@ -93,7 +93,9 @@ class TestBuildGreeting:
         ctx = _make_ctx({"pref:use_salutation": "true"})
         result = json.loads(_build_greeting(ctx, salutation="Benjamin"))
         assert result["greeting"] == "Hallo Benjamin"
-        mock_bg.assert_called_once_with("Benjamin", formal=False)
+        mock_bg.assert_called_once_with(
+            "Benjamin", formal=False, reference_hour=None,
+        )
 
     @patch("business_assistant_imap.plugin.build_greeting")
     def test_formal_greeting(self, mock_bg: MagicMock) -> None:
@@ -101,7 +103,9 @@ class TestBuildGreeting:
         ctx = _make_ctx()
         result = json.loads(_build_greeting(ctx, salutation="Herr Mueller", formal=True))
         assert result["greeting"] == "Sehr geehrter Herr Mueller"
-        mock_bg.assert_called_once_with("Herr Mueller", formal=True)
+        mock_bg.assert_called_once_with(
+            "Herr Mueller", formal=True, reference_hour=None,
+        )
 
     @patch("business_assistant_imap.plugin.build_greeting")
     def test_default_pref_is_enabled(self, mock_bg: MagicMock) -> None:

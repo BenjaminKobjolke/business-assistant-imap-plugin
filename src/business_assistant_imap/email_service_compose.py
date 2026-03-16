@@ -7,6 +7,8 @@ import html
 import json
 import logging
 import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from .constants import MIME_TEXT_HTML, MIME_TEXT_PLAIN, SNIPPET_MAX_CHARS
 from .draft_builder import (
@@ -17,6 +19,7 @@ from .draft_builder import (
     make_reply_subject,
     save_draft_to_imap,
 )
+from .send_later import build_send_later_headers
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,17 @@ def _extract_reply_address(from_address: str) -> str:
 
 class ComposeMixin:
     """Compose/reply/forward methods — mixed into EmailService."""
+
+    def _get_send_later_headers(self) -> dict[str, str] | None:
+        """Build Send Later headers if scheduling is enabled."""
+        if not self._settings.send_later_enabled:
+            return None
+        tz = ZoneInfo(self._settings.timezone)
+        now = datetime.now(tz)
+        return build_send_later_headers(
+            now, self._settings.send_later_start_hour,
+            self._settings.send_later_end_hour,
+        )
 
     def _smtp_kwargs(self) -> dict:
         """Return SMTP connection kwargs from settings."""
@@ -148,6 +162,7 @@ class ComposeMixin:
                 subject=content.subject,
                 html_body=html_body,
                 from_email=self._settings.from_address,
+                custom_headers=self._get_send_later_headers(),
             )
             if success:
                 return "Draft reply saved."
@@ -268,14 +283,18 @@ class ComposeMixin:
                 include_footer=include_footer,
             )
             try:
-                success = client.save_draft(
-                    to_addresses=[to_address],
-                    subject=subject,
-                    body=html_body,
-                    from_email=self._settings.from_address,
-                    content_type=MIME_TEXT_HTML,
-                    attachments=attachments,
-                )
+                fwd_kwargs: dict = {
+                    "to_addresses": [to_address],
+                    "subject": subject,
+                    "body": html_body,
+                    "from_email": self._settings.from_address,
+                    "content_type": MIME_TEXT_HTML,
+                    "attachments": attachments,
+                }
+                sl_headers = self._get_send_later_headers()
+                if sl_headers:
+                    fwd_kwargs["custom_headers"] = sl_headers
+                success = client.save_draft(**fwd_kwargs)
                 if success:
                     return "Forward draft saved."
                 return "Failed to save forward draft."
@@ -341,6 +360,9 @@ class ComposeMixin:
             }
             if bcc_addresses:
                 kwargs["bcc_addresses"] = bcc_addresses
+            sl_headers = self._get_send_later_headers()
+            if sl_headers:
+                kwargs["custom_headers"] = sl_headers
             success = client.save_draft(**kwargs)
             if success:
                 return "Compose draft saved."
