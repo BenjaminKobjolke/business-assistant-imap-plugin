@@ -320,4 +320,10 @@ When the user asks to save an email attachment to a project folder or local path
 1. Use show_email to see attachment metadata (filenames)
 2. Build the destination path (e.g., using pm_store_file_in_project or a direct path)
 3. Call save_attachment with the email ID, exact filename, and destination path
-4. The attachment is saved as binary data via the filesystem service"""
+4. The attachment is saved as binary data via the filesystem service
+
+## Cross-plugin workflows
+- To store an email attachment in a project folder: 1) save_attachment to a local path, \
+2) pm_store_file_in_project with that path.
+- To embed email attachments in a project's Obsidian note: 1) save_attachment to a local path, \
+2) pm_add_project_update with file_paths= to copy into the note's _resources and embed."""
