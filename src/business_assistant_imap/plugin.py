@@ -286,12 +286,15 @@ def _reply_email(
     folder: str = "INBOX",
     include_footer: bool = True,
     action: str = "draft",
+    send_at: str = "",
 ) -> str:
     """Reply to an email. action: 'draft' saves to Drafts, 'send' sends via SMTP.
 
     greeting_id: required — pass the greeting_id from build_greeting.
     Use folder parameter if the email is not in INBOX.
     Set include_footer=False to omit the HTML footer/signature.
+    send_at: ISO 8601 datetime to schedule sending (e.g. '2026-03-25T14:00').
+    When set, the draft is scheduled via Thunderbird Send Later.
     """
     greeting = _resolve_greeting(greeting_id)
     if greeting is None:
@@ -300,6 +303,8 @@ def _reply_email(
             "Call build_greeting first to get a greeting_id, "
             "then pass it here."
         )
+    if send_at:
+        action = "draft"
     logger.info(
         "reply_email: email_id=%r action=%r folder=%r",
         email_id, action, folder,
@@ -313,6 +318,7 @@ def _reply_email(
     return svc.draft_reply(
         email_id, reply_body, greeting, folder,
         include_footer=include_footer,
+        send_at=send_at or None,
     )
 
 
@@ -324,13 +330,18 @@ def _forward_email(
     folder: str = "INBOX",
     include_footer: bool = False,
     action: str = "draft",
+    send_at: str = "",
 ) -> str:
     """Forward an email. action: 'draft' saves to Drafts, 'send' sends via SMTP.
 
     Preserves all attachments and inline images.
     Use folder parameter if the email is not in INBOX.
     Set include_footer=True to include the HTML footer/signature.
+    send_at: ISO 8601 datetime to schedule sending (e.g. '2026-03-25T14:00').
+    When set, the draft is scheduled via Thunderbird Send Later.
     """
+    if send_at:
+        action = "draft"
     logger.info(
         "forward_email: email_id=%r to=%r action=%r folder=%r",
         email_id, to_addresses, action, folder,
@@ -344,6 +355,7 @@ def _forward_email(
     return svc.draft_forward(
         email_id, to_addresses[0], additional_message, folder,
         include_footer=include_footer,
+        send_at=send_at or None,
     )
 
 
@@ -357,11 +369,14 @@ def _compose_email(
     content_type: str = "text/html",
     include_footer: bool = True,
     action: str = "draft",
+    send_at: str = "",
 ) -> str:
     """Compose a new email. action: 'draft' saves to Drafts, 'send' sends via SMTP.
 
     greeting_id: required — pass the greeting_id from build_greeting.
     Set include_footer=False to omit the HTML footer/signature.
+    send_at: ISO 8601 datetime to schedule sending (e.g. '2026-03-25T14:00').
+    When set, the draft is scheduled via Thunderbird Send Later.
     """
     greeting = _resolve_greeting(greeting_id)
     if greeting is None:
@@ -370,6 +385,8 @@ def _compose_email(
             "Call build_greeting first to get a greeting_id, "
             "then pass it here."
         )
+    if send_at:
+        action = "draft"
     if greeting:
         if content_type == "text/html":
             body = f'<div style="margin-bottom: 10px;">{greeting},</div>{body}'
@@ -390,6 +407,7 @@ def _compose_email(
         to_addresses=to_addresses, subject=subject, body=body,
         bcc_addresses=bcc_addresses, content_type=content_type,
         include_footer=include_footer,
+        send_at=send_at or None,
     )
 
 

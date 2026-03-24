@@ -208,6 +208,90 @@ class TestComposeEmailWithFooter:
         assert "<p>My Footer</p>" not in call_kwargs["body"]
 
 
+class TestDraftReplyScheduled:
+    @patch("business_assistant_imap.email_service_compose.save_draft_to_imap")
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_draft_reply_with_send_at(
+        self,
+        mock_client_cls: MagicMock,
+        mock_save_draft: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """draft_reply with send_at produces explicit Send Later headers."""
+        mock_save_draft.return_value = True
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_message_by_id.return_value = (
+            "1", FakeEmailMessage(message_id="1"),
+        )
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.draft_reply(
+            "1", "Thanks!", send_at="2026-03-25T14:00",
+        )
+
+        assert "scheduled" in result.lower()
+        call_kwargs = mock_save_draft.call_args[1]
+        headers = call_kwargs["custom_headers"]
+        assert "X-Send-Later-At" in headers
+        assert "Wed, 25 Mar 2026 14:00:00" in headers["X-Send-Later-At"]
+
+
+class TestDraftForwardScheduled:
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_draft_forward_with_send_at(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """draft_forward with send_at produces Send Later headers."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.get_message_by_id.return_value = (
+            "100", FakeEmailMessage(message_id="100", subject="Orig"),
+        )
+        mock_client.save_draft.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.draft_forward(
+            "100", "bob@example.com", send_at="2026-03-25T09:00",
+        )
+
+        assert "scheduled" in result.lower()
+        call_kwargs = mock_client.save_draft.call_args[1]
+        headers = call_kwargs.get("custom_headers", {})
+        assert "X-Send-Later-At" in headers
+
+
+class TestDraftComposeScheduled:
+    @patch("business_assistant_imap.email_service.ImapClient")
+    def test_draft_compose_with_send_at(
+        self,
+        mock_client_cls: MagicMock,
+        email_settings: EmailSettings,
+    ) -> None:
+        """draft_compose with send_at produces Send Later headers."""
+        mock_client = MagicMock()
+        mock_client.connect.return_value = True
+        mock_client.save_draft.return_value = True
+        mock_client_cls.return_value = mock_client
+
+        service = EmailService(email_settings)
+        result = service.draft_compose(
+            to_addresses=["alice@example.com"],
+            subject="Hello",
+            body="<p>Hi</p>",
+            send_at="2026-03-25T15:30",
+        )
+
+        assert "scheduled" in result.lower()
+        call_kwargs = mock_client.save_draft.call_args[1]
+        headers = call_kwargs.get("custom_headers", {})
+        assert "X-Send-Later-At" in headers
+
+
 class TestDraftReplyWithoutFooter:
     @patch(
         "business_assistant_imap.email_service_compose.save_draft_to_imap"

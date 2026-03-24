@@ -115,11 +115,15 @@ Do NOT put the folder name in the query string.
 (use folder param if not in INBOX)
 - send_rsvp: Accept or decline a meeting invite (use folder param if not in INBOX)
 - reply_email: Reply to an email. Use action='draft' (default) to save to Drafts, \
-action='send' to send via SMTP. Use folder param if not in INBOX.
+action='send' to send via SMTP. Use folder param if not in INBOX. \
+Use send_at with an ISO 8601 datetime (e.g. '2026-03-25T14:00') to schedule \
+the reply for a specific time via Thunderbird Send Later.
 - forward_email: Forward an email preserving all attachments and inline images. \
-Use action='draft' (default) to save to Drafts, action='send' to send via SMTP.
+Use action='draft' (default) to save to Drafts, action='send' to send via SMTP. \
+Use send_at with an ISO 8601 datetime to schedule the forward for a specific time.
 - compose_email: Compose a new email. Use action='draft' (default) to save to Drafts, \
-action='send' to send via SMTP.
+action='send' to send via SMTP. \
+Use send_at with an ISO 8601 datetime to schedule the email for a specific time.
 - search_sent_to: Search Sent folder for recent emails to a specific address. \
 Returns body_start and body_end snippets so you can detect writing style: \
 salutation, tone, language, and sign-off patterns.
@@ -314,6 +318,15 @@ Note: footer is only appended for HTML emails, not plain text.
 - "save draft" / "save" / "speichern" → call compose_email(greeting_id=..., action='draft')
 - "send" / "senden" / "abschicken" → call compose_email(greeting_id=..., action='send')
 - NEVER call compose_email without explicit user confirmation
+
+## Scheduling emails
+When the user asks to send an email at a specific time (e.g., "send this at 3pm tomorrow", \
+"forward this on Monday morning"), convert their request to an ISO 8601 datetime string \
+and pass it as the send_at parameter. The email will be saved as a draft with Thunderbird \
+Send Later headers. The automatic business-hours scheduling still applies when send_at \
+is not provided. When send_at is used, action is always 'draft' (enforced automatically). \
+Any time is allowed, including outside business hours. Confirm the scheduled time with \
+the user.
 
 ## Saving attachments to project folders
 When the user asks to save an email attachment to a project folder or local path:

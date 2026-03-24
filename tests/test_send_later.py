@@ -6,6 +6,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from business_assistant_imap.send_later import (
+    build_send_at_headers,
     build_send_later_headers,
     calculate_next_send_time,
     format_rfc5322,
@@ -136,3 +137,26 @@ class TestBuildSendLaterHeaders:
         headers = build_send_later_headers(now)
         assert headers is not None
         assert "Tue, 17 Mar 2026 08:00:00" in headers["X-Send-Later-At"]
+
+
+class TestBuildSendAtHeaders:
+    """Tests for build_send_at_headers (explicit scheduling)."""
+
+    def test_returns_headers_during_business_hours(self) -> None:
+        """Always returns headers, even during business hours."""
+        dt = _dt(2026, 3, 16, 10, 0)  # Monday 10:00
+        headers = build_send_at_headers(dt)
+        assert headers is not None
+        assert "Mon, 16 Mar 2026 10:00:00" in headers["X-Send-Later-At"]
+        assert headers["X-Send-Later-Recur"] == "none"
+
+    def test_returns_headers_for_weekend(self) -> None:
+        dt = _dt(2026, 3, 21, 15, 0)  # Saturday 15:00
+        headers = build_send_at_headers(dt)
+        assert "Sat, 21 Mar 2026 15:00:00" in headers["X-Send-Later-At"]
+
+    def test_preserves_exact_time(self) -> None:
+        """Does not adjust the time to business hours."""
+        dt = _dt(2026, 3, 16, 22, 30)  # Monday 22:30
+        headers = build_send_at_headers(dt)
+        assert "22:30:00" in headers["X-Send-Later-At"]

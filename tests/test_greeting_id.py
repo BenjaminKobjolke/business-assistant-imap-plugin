@@ -146,6 +146,7 @@ class TestReplyEmailGreetingId:
         mock_svc.draft_reply.assert_called_once_with(
             "1", "Thanks!", "Hallo Herr Mueller", "INBOX",
             include_footer=True,
+            send_at=None,
         )
 
     @patch("business_assistant_imap.plugin._get_service")
@@ -163,6 +164,7 @@ class TestReplyEmailGreetingId:
         assert result == "Draft reply saved."
         mock_svc.draft_reply.assert_called_once_with(
             "1", "Thanks!", "", "INBOX", include_footer=True,
+            send_at=None,
         )
 
     @patch("business_assistant_imap.plugin._get_service")

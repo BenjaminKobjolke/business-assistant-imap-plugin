@@ -80,6 +80,19 @@ def format_rfc5322(dt: datetime) -> str:
     return f"{day_name}, {day} {month} {year} {time_str} {tz_str}"
 
 
+def build_send_at_headers(send_at: datetime) -> dict[str, str]:
+    """Return Send Later headers for an explicit scheduled time.
+
+    Unlike ``build_send_later_headers``, this always returns headers —
+    it does not check whether the time falls within business hours.
+    The datetime should be timezone-aware.
+    """
+    return {
+        HEADER_SEND_AT: format_rfc5322(send_at),
+        HEADER_RECUR: "none",
+    }
+
+
 def build_send_later_headers(
     now: datetime,
     start_hour: int = 8,

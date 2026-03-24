@@ -19,7 +19,7 @@ from .draft_builder import (
     make_reply_subject,
     save_draft_to_imap,
 )
-from .send_later import build_send_later_headers
+from .send_later import build_send_at_headers, build_send_later_headers
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +35,22 @@ def _extract_reply_address(from_address: str) -> str:
 class ComposeMixin:
     """Compose/reply/forward methods — mixed into EmailService."""
 
-    def _get_send_later_headers(self) -> dict[str, str] | None:
-        """Build Send Later headers if scheduling is enabled."""
+    def _get_send_later_headers(
+        self, send_at: str | None = None,
+    ) -> dict[str, str] | None:
+        """Build Send Later headers.
+
+        If *send_at* is provided (ISO 8601 string), schedule for that exact
+        time.  Otherwise fall back to automatic business-hours scheduling.
+        """
+        tz = ZoneInfo(self._settings.timezone)
+        if send_at:
+            dt = datetime.fromisoformat(send_at)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=tz)
+            return build_send_at_headers(dt)
         if not self._settings.send_later_enabled:
             return None
-        tz = ZoneInfo(self._settings.timezone)
         now = datetime.now(tz)
         return build_send_later_headers(
             now, self._settings.send_later_start_hour,
@@ -140,6 +151,7 @@ class ComposeMixin:
         greeting: str = "",
         folder: str = "INBOX",
         include_footer: bool = True,
+        send_at: str | None = None,
     ) -> str:
         """Save a reply draft to an email."""
         client = self._create_client()
@@ -162,9 +174,13 @@ class ComposeMixin:
                 subject=content.subject,
                 html_body=html_body,
                 from_email=self._settings.from_address,
-                custom_headers=self._get_send_later_headers(),
+                custom_headers=self._get_send_later_headers(
+                    send_at=send_at,
+                ),
             )
             if success:
+                if send_at:
+                    return f"Draft reply saved and scheduled for {send_at}."
                 return "Draft reply saved."
             return "Failed to save draft reply."
         finally:
@@ -266,6 +282,7 @@ class ComposeMixin:
         additional_message: str = "",
         folder: str = "INBOX",
         include_footer: bool = True,
+        send_at: str | None = None,
     ) -> str:
         """Save a forward draft preserving attachments and inline images."""
         client = self._create_client()
@@ -291,11 +308,15 @@ class ComposeMixin:
                     "content_type": MIME_TEXT_HTML,
                     "attachments": attachments,
                 }
-                sl_headers = self._get_send_later_headers()
+                sl_headers = self._get_send_later_headers(
+                    send_at=send_at,
+                )
                 if sl_headers:
                     fwd_kwargs["custom_headers"] = sl_headers
                 success = client.save_draft(**fwd_kwargs)
                 if success:
+                    if send_at:
+                        return f"Forward draft saved and scheduled for {send_at}."
                     return "Forward draft saved."
                 return "Failed to save forward draft."
             except Exception as e:
@@ -345,6 +366,7 @@ class ComposeMixin:
         bcc_addresses: list[str] | None = None,
         content_type: str = "text/html",
         include_footer: bool = True,
+        send_at: str | None = None,
     ) -> str:
         """Save a new composed email as draft with optional BCC."""
         if include_footer and content_type == MIME_TEXT_HTML and self._settings.footer_html:
@@ -360,11 +382,13 @@ class ComposeMixin:
             }
             if bcc_addresses:
                 kwargs["bcc_addresses"] = bcc_addresses
-            sl_headers = self._get_send_later_headers()
+            sl_headers = self._get_send_later_headers(send_at=send_at)
             if sl_headers:
                 kwargs["custom_headers"] = sl_headers
             success = client.save_draft(**kwargs)
             if success:
+                if send_at:
+                    return f"Compose draft saved and scheduled for {send_at}."
                 return "Compose draft saved."
             return "Failed to save compose draft."
         finally:
